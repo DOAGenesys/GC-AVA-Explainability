@@ -1,0 +1,35 @@
+# Copy to terraform.tfvars. No secrets here - AWS credentials are injected by the aws skill
+# (skills/aws/scripts/aws-exec.ps1) and never written to a file in this repo.
+
+# eu-central-1 deliberately: the org's habitat is prod-euc1 (Frankfurt), and the events carry
+# EU conversation content. Keeping the collector in the same region as the org avoids a
+# cross-border hop and minimises egress. This MUST equal awsAccountRegion on the Genesys
+# integration, or the partner event source will not be found.
+aws_region          = "eu-central-1"
+genesys_org_id      = "<GENESYS_ORG_ID>"
+event_source_suffix = "do-eventbridge-ava-monitoring"
+
+name_prefix = "ava-explain"
+
+# Conservative until validation 6 establishes the rate-limit domain for signed downloads.
+max_download_concurrency = 5
+
+# Shared-org hygiene: EU conversation content should not accumulate while we validate.
+bronze_expiration_days = 30
+raw_log_retention_days = 7
+
+# The largest cost line in the stack: it ingests 100% of an org-wide firehose into CloudWatch
+# Logs at $0.50/GB. Leave on only long enough to confirm the real detail-type shape, then set
+# to false. The Bronze bucket already retains everything of lasting value.
+enable_discovery_logging = true
+
+# Leave empty at first. Populate from artifacts\ava-flow-registry.json only after reviewing
+# it - an over-narrow filter discards events whose signed URIs cannot be recovered later.
+#   $r = Get-Content artifacts\ava-flow-registry.json | ConvertFrom-Json
+#   $r.avaFlowIds
+ava_flow_ids = []
+
+# Cost guardrails. Add an address to make the budget and anomaly monitor actually notify;
+# without one they are created but silent.
+monthly_budget_usd  = 10
+budget_alert_emails = []

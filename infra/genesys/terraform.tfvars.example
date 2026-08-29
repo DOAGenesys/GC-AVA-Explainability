@@ -1,0 +1,33 @@
+# Copy to terraform.tfvars. Contains no secrets - credentials come from environment
+# variables exported by scripts\load-genesys-env.ps1.
+
+genesys_org_id   = "<GENESYS_ORG_ID>"
+integration_name = "DO - EventBridge AVA Monitoring"
+aws_account_id   = "123456789012"
+
+# Must equal aws_region in infra/aws. eu-central-1 matches the org's Frankfurt habitat and
+# keeps EU conversation content in-region.
+aws_region = "eu-central-1"
+
+# Must be unique in the org. The existing third-party pipeline uses
+# 'ava-monitoring-81483d3a-...', so this must not collide with it.
+event_source_suffix = "do-eventbridge-ava-monitoring"
+
+# ENABLED is required for Genesys to create the partner event source in AWS - a DISABLED
+# integration creates nothing, so the AWS stack has nothing to attach a bus to.
+#
+# Sequence:
+#   1. apply here with ENABLED
+#   2. scripts\wait-for-partner-source.ps1   (Genesys takes a few minutes)
+#   3. apply infra/aws
+#
+# Events emitted before step 3 are dropped, because a partner source with no associated bus
+# has nowhere to deliver. That costs a few minutes of events and nothing else.
+intended_state = "ENABLED"
+
+# Topic subscription is org-wide: {id} is not parameterised, so EVERY flow execution in the
+# org is delivered. AWS-side rules control what is stored, never what arrives.
+topic_filters = [
+  "v2.flows.instances.flow.{id}",
+  "v2.detail.events.conversation.{id}.flow.end",
+]

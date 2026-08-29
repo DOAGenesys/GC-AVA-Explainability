@@ -1,0 +1,35 @@
+# Live probe output and captured Genesys events. May contain real conversation
+# content, since execution data at Verbose Notes and above records it.
+artifacts/
+samples/
+
+# Credentials. Genesys credentials are read from the external MCP config at run
+# time; AWS credentials are supplied as environment variables. Neither belongs here.
+*.tfvars
+!example.tfvars
+.env
+.env.*
+# ...but the documented template carries no values and must be committed.
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+tfplan
+*.tfplan
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Lambda build output
+build/
+*.zip
