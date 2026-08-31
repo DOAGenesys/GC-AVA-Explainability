@@ -59,6 +59,32 @@ describe('turnKey', () => {
     expect(turnKey({ sessionId: 'sess-9', turnNumber: '' })).toBeNull();
     expect(turnKey({ sessionId: 'sess-9', turnNumber: '2 turns' })).toBeNull();
   });
+
+  // The live entity carries sessionId and dateCreated and no turn number whatsoever, so the
+  // creation instant is the real natural key rather than a fallback.
+  describe('with the shape the platform actually sends', () => {
+    it('keys on the session and the creation instant', () => {
+      expect(turnKey({ sessionId: 'sess-9', dateCreated: '2026-08-24T13:34:38.906Z' })).toBe(
+        'sess-9:2026-08-24T13:34:38.906Z',
+      );
+    });
+
+    it('still prefers an explicit sequence when one appears', () => {
+      expect(
+        turnKey({ sessionId: 'sess-9', turnNumber: 2, dateCreated: '2026-08-24T13:34:38.906Z' }),
+      ).toBe('sess-9:2');
+    });
+
+    it('distinguishes turns within one session, so a transcript cannot collapse', () => {
+      const first = turnKey({ sessionId: 's', dateCreated: '2026-08-24T13:34:38.906Z' });
+      const second = turnKey({ sessionId: 's', dateCreated: '2026-08-24T13:34:39.882Z' });
+      expect(first).not.toBe(second);
+    });
+
+    it('rejects a date it cannot parse rather than keying on nonsense', () => {
+      expect(turnKey({ sessionId: 'sess-9', dateCreated: 'yesterday' })).toBeNull();
+    });
+  });
 });
 
 describe('cursorFromNextUri', () => {

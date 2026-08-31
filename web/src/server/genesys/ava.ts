@@ -254,10 +254,16 @@ export interface TurnEntity {
   turnNumber?: number | string;
   sequence?: number | string;
   botFlowId?: string;
-  askAction?: string;
+  /** An object, not a string: `{ actionId, actionName, actionType, actionNumber }`. */
+  askAction?: unknown;
   askActionResult?: string;
+  /** A plain string - the utterance - not a structured input object. */
   userInput?: unknown;
+  /** An array of prompt strings. */
   botPrompts?: unknown;
+  /** The turn's own timing, and the only ordering the platform provides. */
+  dateCreated?: string;
+  dateCompleted?: string;
   turnStartTimestamp?: string;
   turnEndTimestamp?: string;
   [key: string]: unknown;
@@ -286,10 +292,19 @@ function firstNumber(entity: TurnEntity, keys: string[]): number | null {
   return null;
 }
 
-/** Candidate field names for a turn's position and timing, in order of preference. */
+/**
+ * Candidate field names for a turn's position and timing, in order of preference.
+ *
+ * `dateCreated` and `dateCompleted` are what this endpoint actually sends, confirmed against every
+ * turn in a live archive. The other names are retained as fallbacks because the entity is
+ * undocumented and has changed shape before.
+ *
+ * No sequence field was observed at all - the platform sends no turn number - so SEQUENCE_KEYS is
+ * speculative and ordering rests on the timestamp.
+ */
 const SEQUENCE_KEYS = ['turnNumber', 'sequenceNumber', 'sequence', 'turnSequenceNumber'];
-const TURN_START_KEYS = ['turnStartTimestamp', 'turnStart', 'turnStartDate', 'startDate'];
-const TURN_END_KEYS = ['turnEndTimestamp', 'turnEnd', 'turnEndDate', 'endDate'];
+const TURN_START_KEYS = ['dateCreated', 'turnStartTimestamp', 'turnStart', 'startDate'];
+const TURN_END_KEYS = ['dateCompleted', 'turnEndTimestamp', 'turnEnd', 'endDate'];
 
 /**
  * A date field, preferring the known names but falling back to any plausibly-named key holding a
@@ -317,6 +332,25 @@ function firstDate(
 }
 
 /**
+ * The ask action reduced to a label worth reading in a transcript.
+ *
+ * `askAction` is an object, and storing it whole put a JSON blob above every bot message. The name
+ * is what identifies the step to an author; the full object stays in `raw`.
+ */
+function actionLabel(askAction: unknown): string | null {
+  if (typeof askAction === 'string') return askAction || null;
+  if (askAction === null || typeof askAction !== 'object') return null;
+
+  const action = askAction as { actionName?: unknown; actionType?: unknown };
+  if (typeof action.actionName === 'string' && action.actionName.length > 0) {
+    return action.actionName;
+  }
+  return typeof action.actionType === 'string' && action.actionType.length > 0
+    ? action.actionType
+    : null;
+}
+
+/**
  * Deterministic last-resort key, derived from the turn's own content.
  *
  * Used only when no identifier can be found. Keys must be stable across passes or the archive would
@@ -332,9 +366,14 @@ function contentKey(entity: TurnEntity): string {
 /**
  * Stable primary key for a turn.
  *
- * A ReportingTurn carries no id of its own, so one is derived from the natural key: turns are
- * numbered within a session. It has to be deterministic, because the archive is maintained by
- * upsert and a fresh key on every pass would duplicate the whole transcript each run.
+ * A ReportingTurn carries no id of its own, and no turn number either, so the key is the session
+ * plus the instant the turn was created - the only pair the platform provides that is unique within
+ * a session.
+ *
+ * Preferring this over hashing the turn's content is a correctness decision, not a cosmetic one. A
+ * turn whose content is later amended upstream - an ask action moving from ConfirmationRequired to
+ * SuccessCollection, say - keeps its identity here and updates in place, where a content hash would
+ * treat it as a new turn and show the transcript twice.
  */
 export function turnKey(entity: TurnEntity): string | null {
   const explicit = firstString(entity, ['id', 'turnId']);
@@ -344,10 +383,13 @@ export function turnKey(entity: TurnEntity): string | null {
     firstString(entity, ['sessionId', 'botSessionId', 'conversationId']) ??
     (typeof entity.session?.id === 'string' ? entity.session.id : null) ??
     (typeof entity.conversation?.id === 'string' ? entity.conversation.id : null);
+  if (owner === null) return null;
 
   const sequence = firstNumber(entity, SEQUENCE_KEYS);
-  if (owner === null || sequence === null) return null;
-  return `${owner}:${sequence}`;
+  if (sequence !== null) return `${owner}:${sequence}`;
+
+  const created = firstDate(entity, TURN_START_KEYS, /start|created/i);
+  return created === null ? null : `${owner}:${created.value}`;
 }
 
 /** Pull the opaque `after` cursor out of the nextUri the platform hands back. */
@@ -414,10 +456,12 @@ export async function getReportingTurns(
       if (natural === null) synthesised += 1;
       const turnId = natural ?? contentKey(entity);
 
-      const start = firstDate(entity, TURN_START_KEYS, /start/i);
-      const end = firstDate(entity, TURN_END_KEYS, /end/i);
+      const start = firstDate(entity, TURN_START_KEYS, /start|created/i);
+      const end = firstDate(entity, TURN_END_KEYS, /end|completed/i);
       const sequence = firstNumber(entity, SEQUENCE_KEYS);
-      if (sequence === null) unordered += 1;
+      // Unordered means no ordering at all. A missing sequence is normal - the platform sends none -
+      // so warning on that alone would fire on every run and mean nothing.
+      if (sequence === null && start === null) unordered += 1;
       if (start) resolvedStartKey ??= start.key;
 
       turns.push({
@@ -426,7 +470,7 @@ export async function getReportingTurns(
         flowId: entity.botFlowId ?? flowId,
         conversationId: entity.conversation?.id ?? entity.conversationId ?? null,
         sequence,
-        askAction: entity.askAction ?? null,
+        askAction: actionLabel(entity.askAction),
         askActionResult: entity.askActionResult ?? null,
         userInput: entity.userInput ?? null,
         botPrompts: entity.botPrompts ?? null,

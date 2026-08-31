@@ -132,9 +132,18 @@ export async function upsertTurns(turns: ReportingTurn[]): Promise<void> {
               ${t.askAction}, ${t.askActionResult}, ${JSON.stringify(t.userInput)},
               ${JSON.stringify(t.botPrompts)}, ${nullableTimestamp(t.turnStart)},
               ${nullableTimestamp(t.turnEnd)}, ${JSON.stringify(t.raw)})
+      -- Every derived column is refreshed, not just the ones that change upstream. Two mapping bugs
+      -- have already shipped here, and an update list that skipped columns meant a corrected mapping
+      -- only ever applied to turns arriving for the first time, leaving existing rows wrong forever.
       ON CONFLICT (turn_id) DO UPDATE SET
+        session_id = EXCLUDED.session_id,
+        conversation_id = EXCLUDED.conversation_id,
+        sequence_number = EXCLUDED.sequence_number,
+        ask_action = EXCLUDED.ask_action,
         ask_action_result = EXCLUDED.ask_action_result,
+        user_input = EXCLUDED.user_input,
         bot_prompts = EXCLUDED.bot_prompts,
+        turn_start = EXCLUDED.turn_start,
         turn_end = EXCLUDED.turn_end,
         raw = EXCLUDED.raw,
         ingested_at = now()

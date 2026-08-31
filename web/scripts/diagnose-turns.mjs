@@ -184,9 +184,16 @@ try {
   const clientSecret = process.env.GENESYS_INGEST_CLIENT_SECRET;
   const region = process.env.GENESYS_REGION;
 
-  const { rows: flows } = await db.query(
-    `SELECT flow_id, name FROM ava_flows WHERE ava_enabled ORDER BY last_seen_at DESC`,
-  );
+  // Restricted to flows that have actually produced sessions. Probing every AVA-flagged flow prints
+  // dozens of identical empty sections and buries the ones carrying data.
+  const { rows: flows } = await db.query(`
+    SELECT f.flow_id, f.name
+    FROM ava_flows f
+    WHERE f.ava_enabled
+      AND EXISTS (SELECT 1 FROM ava_sessions s WHERE s.flow_id = f.flow_id)
+    ORDER BY f.last_seen_at DESC
+    LIMIT 5
+  `);
 
   if (!clientId || !clientSecret || !region) {
     heading('live api probe');
@@ -245,16 +252,9 @@ try {
           const first = entities[0];
           // Field names only - the values are conversation content.
           console.log('first entity field names:', Object.keys(first).join(', '));
-          console.log('keying fields:', {
-            hasId: 'id' in first,
-            hasSessionId: Boolean(first.sessionId),
-            hasConversationId: Boolean(first.conversation?.id),
-            sequenceNumberType: typeof first.sequenceNumber,
-          });
-          const keyable = entities.filter(
-            (e) => e.id || ((e.sessionId || e.conversation?.id) && e.sequenceNumber !== undefined),
-          ).length;
-          console.log(`keyable with current logic: ${keyable} / ${entities.length}`);
+          // The key is session plus creation instant, because the platform sends no turn number.
+          const keyable = entities.filter((e) => e.sessionId && e.dateCreated).length;
+          console.log(`keyable (sessionId + dateCreated): ${keyable} / ${entities.length}`);
         } else {
           console.log(
             'The platform returned no turns for this flow. Either the flow produced none, or\n' +
@@ -269,6 +269,59 @@ try {
           [flow.flow_id],
         );
         console.log('archived sessions for this flow:', sessionRows[0]);
+      }
+
+      // ------------------------------------------------------- why no execution is ever discovered
+      // Discovery reports zero while the archive holds conversation ids to ask about, so the
+      // question is whether the query is malformed, unpermitted, or simply has no data to return.
+      heading('execution discovery probe');
+
+      const capsRes = await fetch(`https://${apiHost}/api/v2/flows/instances/querycapabilities`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(`querycapabilities: HTTP ${capsRes.status}`);
+      if (capsRes.ok) {
+        // Names the criteria this org is actually allowed to query by, which is the difference
+        // between a wrong criteria key and genuinely absent execution data.
+        console.log(JSON.stringify(await capsRes.json(), null, 2).slice(0, 2000));
+      } else {
+        console.log((await capsRes.text()).slice(0, 500));
+      }
+
+      const { rows: convRows } = await db.query(`
+        SELECT DISTINCT conversation_id
+        FROM ava_sessions
+        WHERE conversation_id IS NOT NULL AND date_created > now() - interval '9 days'
+        LIMIT 5
+      `);
+      const conversationIds = convRows.map((r) => r.conversation_id);
+      console.log(`\nprobing ${conversationIds.length} archived conversation ids`);
+
+      // Batched and single-value forms are both tried: a criteria that only accepts one value would
+      // explain a query that succeeds and returns nothing.
+      for (const values of [conversationIds, conversationIds.slice(0, 1)]) {
+        if (values.length === 0) continue;
+        const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=200`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            criteria: [{ criteriaKey: 'ConversationId', values, operator: 'EQ' }],
+          }),
+        });
+        const text = await res.text();
+        console.log(`\n${values.length} id(s): HTTP ${res.status}`);
+        try {
+          const body = JSON.parse(text);
+          if (!res.ok) console.log('error body:', JSON.stringify(body).slice(0, 600));
+          else {
+            console.log(`entities returned: ${(body.entities ?? []).length}`);
+            if ((body.entities ?? []).length > 0) {
+              console.log('entity field names:', Object.keys(body.entities[0]).join(', '));
+            }
+          }
+        } catch {
+          console.log(text.slice(0, 400));
+        }
       }
     }
   }

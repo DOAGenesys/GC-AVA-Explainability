@@ -84,8 +84,8 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
         >
           {turns.length > 0 ? (
             <div className="transcript">
-              {turns.map((turn) => (
-                <TurnBubbles key={turn.turnId} turn={turn} />
+              {turns.map((turn, index) => (
+                <TurnBubbles key={turn.turnId} turn={turn} position={index + 1} />
               ))}
             </div>
           ) : (
@@ -153,15 +153,19 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
  * Both sides are defensive about shape because the platform returns the utterance under different
  * keys depending on channel and input mode, and the turn-level metadata fields are still changing.
  */
-function TurnBubbles({ turn }: { turn: TurnRow }) {
+function TurnBubbles({ turn, position }: { turn: TurnRow; position: number }) {
   const user = extractText(turn.userInput);
   const bot = extractText(turn.botPrompts);
+
+  // The platform sends no turn number, so the label is the turn's position in the ordered
+  // transcript. Showing that is honest and useful; showing "turn ?" was neither.
+  const label = turn.sequence ?? position;
 
   return (
     <>
       {user ? (
         <div className="bubble user">
-          <div className="bubble-meta">Customer · turn {turn.sequence ?? '?'}</div>
+          <div className="bubble-meta">Customer · turn {label}</div>
           {user}
         </div>
       ) : null}
