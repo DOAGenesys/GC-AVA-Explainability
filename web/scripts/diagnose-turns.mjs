@@ -354,53 +354,81 @@ try {
         if (note) console.log(`  ${note}`);
       }
 
+      // Newest first, and taken from turns rather than sessions. Turns are archived well before
+      // their session is, so this is the only source that includes a conversation that just ran -
+      // which is the one worth probing, since older ones may predate execution capture entirely.
       const { rows: convRows } = await db.query(`
-        SELECT DISTINCT conversation_id
-        FROM ava_sessions
-        WHERE conversation_id IS NOT NULL AND date_created > now() - interval '9 days'
+        SELECT conversation_id, max(turn_start) AS latest
+        FROM ava_turns
+        WHERE conversation_id IS NOT NULL
+        GROUP BY 1
+        ORDER BY 2 DESC
         LIMIT 5
       `);
       const conversationIds = convRows.map((r) => r.conversation_id);
-      // Control group. Every flow probed above is a bot or digital bot flow, so if none of them has
-      // execution data the result is ambiguous: either the org records nothing, or bot flows
-      // specifically are not recorded this way. A non-bot flow with instances settles it.
-      heading('control: does the org capture execution data for any flow type at all');
+      console.table(convRows);
+      // The invoking flow, taken from the turns themselves. Unlike an arbitrary flow picked off the
+      // flow list, this one demonstrably ran - it is what started the bot - so zero instances here
+      // cannot be explained away by the flow never having executed.
+      heading('invoking flows, which are known to have run');
 
-      for (const type of ['inboundshortmessage', 'inboundcall', 'workflow']) {
-        const listRes = await fetch(
-          `https://${apiHost}/api/v2/flows?type=${type}&pageSize=3&pageNumber=1`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
-        if (!listRes.ok) {
-          console.log(`${type}: flow list HTTP ${listRes.status}`);
-          continue;
-        }
-        const listed = (await listRes.json()).entities ?? [];
-        if (listed.length === 0) {
-          console.log(`${type}: no flows of this type in the org`);
-          continue;
-        }
+      const { rows: parents } = await db.query(`
+        SELECT DISTINCT e->'flow'->>'id'   AS flow_id,
+                        e->'flow'->>'name' AS name,
+                        e->'flow'->>'type' AS type
+        FROM ava_turns, jsonb_array_elements(raw->'botFlowInvocationEvents') e
+        WHERE jsonb_typeof(raw->'botFlowInvocationEvents') = 'array'
+          AND e->'flow'->>'id' IS NOT NULL
+        LIMIT 5
+      `);
 
-        for (const flow of listed) {
-          const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=50`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              criteria: [{ criteriaKey: 'FlowId', values: [flow.id], operator: 'eq' }],
-            }),
-          });
-          let detail = `HTTP ${res.status}`;
-          try {
-            const body = await res.json();
-            detail += res.ok
-              ? `, instances: ${(body.entities ?? []).length}`
-              : `, ${JSON.stringify(body).slice(0, 150)}`;
-          } catch {
-            /* status alone is enough to interpret this */
-          }
-          console.log(`${type} "${flow.name}": ${detail}`);
+      for (const parent of parents) {
+        const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=50`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            criteria: [{ criteriaKey: 'FlowId', values: [parent.flow_id], operator: 'eq' }],
+          }),
+        });
+        let detail = `HTTP ${res.status}`;
+        try {
+          const body = await res.json();
+          detail += res.ok
+            ? `, instances: ${(body.entities ?? []).length}`
+            : `, ${JSON.stringify(body).slice(0, 150)}`;
+        } catch {
+          /* status alone is enough to interpret this */
         }
+        console.log(`${parent.type} "${parent.name}" ${parent.flow_id}: ${detail}`);
       }
+
+      // Division scope is the one access failure that does not announce itself: a role granted on
+      // the wrong division returns 200 with an empty list rather than 403, which is exactly the
+      // result being investigated. Comparing what this token can see against where the flows live
+      // distinguishes that from data that is genuinely absent.
+      heading('what this credential can see');
+
+      const divRes = await fetch(`https://${apiHost}/api/v2/authorization/divisions?pageSize=100`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      console.log(`divisions visible to the ingest client: HTTP ${divRes.status}`);
+      if (divRes.ok) {
+        const divisions = (await divRes.json()).entities ?? [];
+        console.table(divisions.map((d) => ({ id: d.id, name: d.name, home: d.homeDivision })));
+      } else {
+        console.log((await divRes.text()).slice(0, 300));
+      }
+
+      const { rows: flowDivisions } = await db.query(`
+        SELECT coalesce(division_id, '(none recorded)') AS division_id,
+               count(*)                                AS flows
+        FROM ava_flows
+        WHERE ava_enabled
+        GROUP BY 1
+        ORDER BY 2 DESC
+      `);
+      console.log('divisions the AVA-enabled flows belong to:');
+      console.table(flowDivisions);
 
       console.log(`\nprobing ${conversationIds.length} archived conversation ids`);
 
