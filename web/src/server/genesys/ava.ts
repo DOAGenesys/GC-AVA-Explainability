@@ -205,7 +205,7 @@ export interface ReportingTurn {
   raw: unknown;
 }
 
-interface TurnEntity {
+export interface TurnEntity {
   id?: string;
   sessionId?: string;
   botFlowId?: string;
@@ -219,35 +219,73 @@ interface TurnEntity {
   turnEndTimestamp?: string;
 }
 
-/** One call per flow returns the per-turn transcript for every session in the window. */
+/**
+ * Stable primary key for a turn.
+ *
+ * A ReportingTurn carries no id of its own, so one is derived from the natural key: turns are
+ * numbered within a session. It has to be deterministic, because the archive is maintained by
+ * upsert and a fresh key on every pass would duplicate the whole transcript each run.
+ */
+export function turnKey(entity: TurnEntity): string | null {
+  if (entity.id) return entity.id;
+  const owner = entity.sessionId ?? entity.conversation?.id;
+  if (!owner || entity.sequenceNumber === undefined) return null;
+  return `${owner}:${entity.sequenceNumber}`;
+}
+
+/** Pull the opaque `after` cursor out of the nextUri the platform hands back. */
+export function cursorFromNextUri(nextUri: string | undefined): string | null {
+  if (!nextUri) return null;
+  try {
+    // nextUri is relative, so it needs a base to parse against; the base is then discarded.
+    return new URL(nextUri, 'https://api.invalid').searchParams.get('after');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The per-turn transcript for a flow.
+ *
+ * Note the absence of an interval: this endpoint has no date filter and always returns whatever
+ * utterance history is still within the platform's 10-day TTL. The ingestion lookback therefore
+ * has no effect here, and the cost of this call grows with retained turn volume rather than with
+ * the schedule - worth watching once a flow sustains thousands of turns per window.
+ */
 export async function getReportingTurns(
   flowId: string,
-  interval: Interval,
   identity: Identity,
   budget: ApiBudget,
 ): Promise<ReportingTurn[]> {
   const turns: ReportingTurn[] = [];
-  let after: string | undefined;
+  let after: string | null = null;
+  let unkeyable = 0;
 
   for (let page = 0; page < 30; page += 1) {
     const res = await genesysRequest<{ entities?: TurnEntity[]; nextUri?: string }>({
       path: `/api/v2/analytics/botflows/${flowId}/reportingturns`,
-      query: {
-        interval: intervalParam(interval),
-        pageSize: 100,
-        ...(after ? { after } : {}),
-      },
+      query: { pageSize: 100, ...(after ? { after } : {}) },
       identity,
       budget,
       expectedStatuses: [404],
     });
-    if (!res.ok || !res.data) break;
+
+    if (!res.ok || !res.data) {
+      // Never fail silently here: turn data is the only durable copy of a 10-day retention window,
+      // so a swallowed error is permanent transcript loss.
+      logger.warn('ava.reportingturns.request_failed', { flowId, page, status: res.status });
+      break;
+    }
 
     const entities = res.data.entities ?? [];
     for (const entity of entities) {
-      if (!entity.id) continue;
+      const turnId = turnKey(entity);
+      if (!turnId) {
+        unkeyable += 1;
+        continue;
+      }
       turns.push({
-        turnId: entity.id,
+        turnId,
         sessionId: entity.sessionId ?? null,
         flowId: entity.botFlowId ?? flowId,
         conversationId: entity.conversation?.id ?? null,
@@ -262,10 +300,13 @@ export async function getReportingTurns(
       });
     }
 
-    // Cursor paging: the last id of the page is the cursor for the next one.
-    const last = entities.at(-1);
-    if (!res.data.nextUri || !last?.id || entities.length === 0) break;
-    after = last.id;
+    const next = cursorFromNextUri(res.data.nextUri);
+    if (!next || entities.length === 0) break;
+    after = next;
+  }
+
+  if (unkeyable > 0) {
+    logger.warn('ava.reportingturns.unkeyable_entities', { flowId, unkeyable, kept: turns.length });
   }
 
   return turns;

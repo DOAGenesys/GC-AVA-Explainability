@@ -95,10 +95,11 @@ export function getServerConfig(): ServerConfig {
       cronSecret: process.env.CRON_SECRET || null,
       configured: Boolean(clientId && clientSecret && regionHost),
       flowIds: list(process.env.AVA_FLOW_IDS),
-      // Overlaps the 10-minute cron cadence on purpose. Reporting-turn data appears with some
-      // lag, and an ingestion window that exactly matches the schedule loses whatever landed a
-      // second late. Upserts make the overlap free.
-      lookbackMinutes: int(process.env.INGEST_LOOKBACK_MINUTES, 30),
+      // Bounds the session query only; reporting turns have no date filter. Overlaps the 10-minute
+      // cron cadence by a wide margin on purpose: session data appears with some lag, and a window
+      // matching the schedule loses whatever landed a second late. Upserts make the overlap free,
+      // and the extra width is what lets ingestion recover a gap rather than lose it permanently.
+      lookbackMinutes: int(process.env.INGEST_LOOKBACK_MINUTES, 240),
       maxExecutionsPerRun: int(process.env.INGEST_MAX_EXECUTIONS_PER_RUN, 200),
     },
     jobsMaxIdsPerRequest: int(process.env.JOBS_MAX_IDS, 10),
