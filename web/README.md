@@ -357,8 +357,19 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 1. Import the repository, setting the root directory to `web`.
 2. Attach a Postgres store — this provides `POSTGRES_URL` automatically.
 3. Set the remaining environment variables from the table above.
-4. Deploy, then run `npm run db:init` once against the production database (or apply
-   `src/server/db/schema.sql` directly).
+4. Deploy, then **apply the schema once against the production database** — attaching a store only
+   provides an empty database, so until this is done every page that reads data will tell you the
+   schema is missing:
+
+   ```bash
+   # from web/, using the connection string from the project's storage tab
+   POSTGRES_URL="postgres://..." npm run db:init          # bash/zsh
+   $env:POSTGRES_URL="postgres://..."; npm run db:init    # PowerShell
+   ```
+
+   An explicit `POSTGRES_URL` takes precedence over `.env.local`, and the script is idempotent, so
+   re-running it is safe. Applying `src/server/db/schema.sql` by hand works just as well.
+
 5. Add the deployment's `/api/auth/callback` URL to the interactive OAuth client.
 
 > The ten-minute cron schedules in `vercel.json` require a plan that permits sub-daily crons. On a

@@ -14,6 +14,56 @@ export function assertDatabaseConfigured(): void {
   if (!process.env.POSTGRES_URL) throw new AppError('DATABASE_NOT_CONFIGURED');
 }
 
+/** Tables the read paths depend on. Probed by name so a partial schema is reported, not guessed. */
+const REQUIRED_TABLES = [
+  'ava_flows',
+  'ava_sessions',
+  'ava_turns',
+  'ava_executions',
+  'ava_tool_calls',
+  'ingest_runs',
+] as const;
+
+export type DatabaseStatus =
+  | { state: 'ready' }
+  | { state: 'not-configured' }
+  | { state: 'schema-missing'; missingTables: string[] }
+  | { state: 'unreachable' };
+
+/**
+ * Cheap pre-flight for the read pages.
+ *
+ * Without this a fresh deployment that has POSTGRES_URL but has never had the schema applied throws
+ * an undefined-table error from deep inside an aggregation, which a Server Component surfaces to the
+ * browser as an unexplained 500. Probing first turns that into a setup instruction.
+ */
+export async function getDatabaseStatus(): Promise<DatabaseStatus> {
+  if (!process.env.POSTGRES_URL) return { state: 'not-configured' };
+
+  try {
+    // to_regclass returns NULL instead of erroring for a table that does not exist, so one
+    // round-trip classifies the whole schema.
+    const { rows } = await sql<Record<string, string | null>>`
+      SELECT
+        to_regclass('ava_flows')::text      AS ava_flows,
+        to_regclass('ava_sessions')::text   AS ava_sessions,
+        to_regclass('ava_turns')::text      AS ava_turns,
+        to_regclass('ava_executions')::text AS ava_executions,
+        to_regclass('ava_tool_calls')::text AS ava_tool_calls,
+        to_regclass('ingest_runs')::text    AS ingest_runs
+    `;
+
+    const present = rows[0] ?? {};
+    const missingTables = REQUIRED_TABLES.filter((table) => !present[table]);
+    return missingTables.length > 0
+      ? { state: 'schema-missing', missingTables }
+      : { state: 'ready' };
+  } catch {
+    // Connection refused, bad credentials, exhausted pool: all the same instruction for the reader.
+    return { state: 'unreachable' };
+  }
+}
+
 function nullableTimestamp(value: string | null | undefined): string | null {
   if (!value) return null;
   const parsed = Date.parse(value);

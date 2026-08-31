@@ -12,7 +12,13 @@ import {
   retrievalTone,
 } from '@/components/ui';
 import { getReadiness } from '@/server/config';
-import { getOutcomeBreakdown, getOverviewMetrics, getToolStats, listSessions } from '@/server/db';
+import {
+  getDatabaseStatus,
+  getOutcomeBreakdown,
+  getOverviewMetrics,
+  getToolStats,
+  listSessions,
+} from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +27,10 @@ const WINDOW_DAYS = 7;
 export default async function DashboardPage() {
   const readiness = getReadiness();
   if (!readiness.databaseConfigured) return <NotConfigured missing={readiness.missing} />;
+
+  const status = await getDatabaseStatus();
+  if (status.state === 'schema-missing') return <SchemaMissing missing={status.missingTables} />;
+  if (status.state === 'unreachable') return <DatabaseUnreachable />;
 
   const [metrics, outcomes, tools, sessions] = await Promise.all([
     getOverviewMetrics(WINDOW_DAYS),
@@ -212,6 +222,71 @@ function NotConfigured({ missing }: { missing: string[] }) {
         ) : (
           <Empty title="Nothing missing">Configuration looks complete.</Empty>
         )}
+      </Card>
+    </>
+  );
+}
+
+function SchemaMissing({ missing }: { missing: string[] }) {
+  return (
+    <>
+      <header className="page-head">
+        <div>
+          <h1>Apply the database schema</h1>
+          <p>
+            Postgres is connected but the observability tables have not been created yet, so there
+            is nothing to read from. This is a one-off step per database.
+          </p>
+        </div>
+      </header>
+      <Card title="Run this once" subtitle="From the web directory, against this database">
+        <pre className="code-block">
+          <code>{'POSTGRES_URL="<this deployment\u2019s connection string>" npm run db:init'}</code>
+        </pre>
+        <p className="hint">
+          Copy the connection string from the storage tab of your Vercel project. The script is
+          idempotent, so re-running it is safe. Reload this page afterwards.
+        </p>
+      </Card>
+      <Card title="Missing tables">
+        <table>
+          <thead>
+            <tr>
+              <th>Table</th>
+            </tr>
+          </thead>
+          <tbody>
+            {missing.map((table) => (
+              <tr key={table}>
+                <td>
+                  <code>{table}</code>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+    </>
+  );
+}
+
+function DatabaseUnreachable() {
+  return (
+    <>
+      <header className="page-head">
+        <div>
+          <h1>Database unreachable</h1>
+          <p>The app is configured but could not open a connection to Postgres.</p>
+        </div>
+      </header>
+      <Card title="What to check">
+        <ul className="checklist">
+          <li>
+            <code>POSTGRES_URL</code> is set on this environment and points at a running database.
+          </li>
+          <li>The database is not paused or sleeping.</li>
+          <li>Any IP allow list permits connections from Vercel.</li>
+        </ul>
       </Card>
     </>
   );

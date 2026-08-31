@@ -546,6 +546,42 @@ code,
   background: rgba(255, 69, 26, 0.05);
 }
 
+/* ----------------------------------------------------------------- setup guidance */
+
+.code-block {
+  margin: 0;
+  padding: 13px 15px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-strong);
+  background: var(--surface-sunken, rgba(20, 26, 33, 0.04));
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ink);
+}
+
+.hint {
+  margin: 11px 0 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.checklist {
+  margin: 0;
+  padding-left: 19px;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.checklist li + li {
+  margin-top: 7px;
+}
+
+.error-actions {
+  margin: 18px 0 0;
+}
+
 /* ----------------------------------------------------------------- trace timeline */
 
 .timeline {

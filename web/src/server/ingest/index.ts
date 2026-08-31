@@ -46,6 +46,29 @@ export interface PassResult {
   summary: Record<string, number | string | null>;
 }
 
+/**
+ * Resolve the flows triage should scan, discovering them inline if the registry has not run yet.
+ *
+ * The registry pass only runs every six hours, so a freshly deployed database leaves `ava_flows`
+ * empty and triage would iterate nothing - silently ingesting zero rows until the first registry
+ * tick. Paying for one discovery call on a cold start is much cheaper than losing hours of turn
+ * data against a 10-day upstream retention window.
+ */
+async function resolveTriageFlowIds(
+  explicit: string[],
+  budget: ReturnType<typeof newBudget>,
+): Promise<{ flowIds: string[]; discovered: boolean }> {
+  const known = await listIngestableFlowIds(explicit);
+  if (known.length > 0 || explicit.length > 0) return { flowIds: known, discovered: false };
+
+  const flows = await listAvaFlows(INGESTION, budget);
+  await upsertFlows(flows);
+  return {
+    flowIds: flows.filter((f) => f.avaEnabled).map((f) => f.flowId),
+    discovered: true,
+  };
+}
+
 // --------------------------------------------------------------------------- registry
 
 /**
@@ -111,7 +134,28 @@ export async function runTriagePass(): Promise<PassResult> {
   const budget = newBudget();
 
   try {
-    const flowIds = await listIngestableFlowIds(cfg.ingestion.flowIds);
+    const { flowIds, discovered } = await resolveTriageFlowIds(cfg.ingestion.flowIds, budget);
+
+    // Nothing to scan is not a success. Left as ok:true this pass reports healthy runs forever
+    // while ingesting nothing, which is exactly the silent failure this app exists to surface.
+    if (flowIds.length === 0) {
+      const error = discovered
+        ? 'No AVA-enabled flows found. Check that a flow has agenticVirtualAgentEnabled set and that the ingest credentials can see its division.'
+        : 'No AVA-enabled flows are known yet. The registry pass has not populated ava_flows.';
+      logger.warn('ingest.triage.no_flows', { discovered });
+      await recordIngestRun({
+        kind: 'triage',
+        startedAt,
+        ok: false,
+        apiCalls: budget.calls,
+        rateLimited: budget.rateLimited,
+        flowsScanned: 0,
+        error,
+        detail: { discovered, byPath: budget.byPath },
+      });
+      return { ok: false, apiCalls: budget.calls, summary: { flows: 0, error } };
+    }
+
     const interval = lookbackInterval(cfg.ingestion.lookbackMinutes);
     let sessionsSeen = 0;
     let turnsSeen = 0;
@@ -135,13 +179,18 @@ export async function runTriagePass(): Promise<PassResult> {
       flowsScanned: flowIds.length,
       sessionsSeen,
       turnsSeen,
-      detail: { interval, byPath: budget.byPath },
+      detail: { interval, discoveredFlowsInline: discovered, byPath: budget.byPath },
     });
 
     return {
       ok: true,
       apiCalls: budget.calls,
-      summary: { flows: flowIds.length, sessions: sessionsSeen, turns: turnsSeen },
+      summary: {
+        flows: flowIds.length,
+        sessions: sessionsSeen,
+        turns: turnsSeen,
+        discoveredFlowsInline: discovered ? 1 : 0,
+      },
     };
   } catch (err) {
     const message = (err as Error)?.message ?? 'unknown';

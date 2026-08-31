@@ -22,6 +22,8 @@ export const ERROR_CODES = [
   'NO_EXECUTION_HISTORY',
   // Infra
   'DATABASE_NOT_CONFIGURED',
+  'DATABASE_SCHEMA_MISSING',
+  'DATABASE_UNREACHABLE',
   'RATE_LIMITED',
   'GENESYS_UPSTREAM_ERROR',
   'UNKNOWN_ERROR',
@@ -134,6 +136,22 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     retryable: false,
     message: 'No Postgres connection is configured.',
     nextAction: 'Attach a Vercel Postgres store so POSTGRES_URL is present.',
+    httpStatus: 503,
+  },
+  DATABASE_SCHEMA_MISSING: {
+    code: 'DATABASE_SCHEMA_MISSING',
+    severity: 'error',
+    retryable: false,
+    message: 'The database is reachable but the observability tables do not exist yet.',
+    nextAction: 'Apply the schema once with `npm run db:init` against this database.',
+    httpStatus: 503,
+  },
+  DATABASE_UNREACHABLE: {
+    code: 'DATABASE_UNREACHABLE',
+    severity: 'error',
+    retryable: true,
+    message: 'The database could not be reached.',
+    nextAction: 'Check that POSTGRES_URL points at a running database and allows this region.',
     httpStatus: 503,
   },
   RATE_LIMITED: {
