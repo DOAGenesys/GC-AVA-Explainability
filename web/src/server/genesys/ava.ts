@@ -132,7 +132,14 @@ export interface BotFlowSession {
 interface SessionEntity {
   id?: string;
   flow?: { id?: string };
+  /**
+   * Read from both shapes on purpose. This endpoint nests `channel` and `flow`, so nesting is the
+   * house style, but the analytics dimensions for the same data expose `conversationId` flat. A
+   * null here is not cosmetic: execution discovery keys entirely off the conversation id, so
+   * reading only one of the two shapes silently costs every execution trace.
+   */
   conversation?: { id?: string };
+  conversationId?: string;
   channel?: { name?: string };
   language?: string;
   endLanguage?: string;
@@ -150,6 +157,8 @@ export async function getBotFlowSessions(
   budget: ApiBudget,
 ): Promise<BotFlowSession[]> {
   const sessions: BotFlowSession[] = [];
+  let observedFields: string[] | null = null;
+  let missingConversationId = 0;
 
   for (let pageNumber = 1; pageNumber <= 20; pageNumber += 1) {
     const res = await genesysRequest<{ entities?: SessionEntity[]; pageCount?: number }>({
@@ -161,12 +170,18 @@ export async function getBotFlowSessions(
     });
     if (!res.ok || !res.data) break;
 
-    for (const entity of res.data.entities ?? []) {
+    const entities = res.data.entities ?? [];
+    if (entities[0] && observedFields === null) observedFields = Object.keys(entities[0]);
+
+    for (const entity of entities) {
       if (!entity.id) continue;
+      const conversationId = entity.conversation?.id ?? entity.conversationId ?? null;
+      if (conversationId === null) missingConversationId += 1;
+
       sessions.push({
         sessionId: entity.id,
         flowId: entity.flow?.id ?? flowId,
-        conversationId: entity.conversation?.id ?? null,
+        conversationId,
         channelName: entity.channel?.name ?? null,
         language: entity.language ?? null,
         endLanguage: entity.endLanguage ?? null,
@@ -178,6 +193,17 @@ export async function getBotFlowSessions(
     }
 
     if (pageNumber >= (res.data.pageCount ?? 1)) break;
+  }
+
+  // A session without a conversation id can never gain an execution trace, so this is reported as a
+  // warning rather than left to be inferred from an empty fidelity pass.
+  if (missingConversationId > 0) {
+    logger.warn('ava.sessions.missing_conversation_id', {
+      flowId,
+      missing: missingConversationId,
+      total: sessions.length,
+      observedFields,
+    });
   }
 
   return sessions;
@@ -222,9 +248,11 @@ export interface TurnEntity {
   session?: { id?: string };
   conversationId?: string;
   conversation?: { id?: string };
-  sequenceNumber?: number;
-  turnNumber?: number;
-  sequence?: number;
+  // Declared as `number | string` because Genesys analytics routinely serialises counters as
+  // strings, and a strict number check silently discards them.
+  sequenceNumber?: number | string;
+  turnNumber?: number | string;
+  sequence?: number | string;
   botFlowId?: string;
   askAction?: string;
   askActionResult?: string;
@@ -243,10 +271,47 @@ function firstString(entity: TurnEntity, keys: string[]): string | null {
   return null;
 }
 
+/**
+ * First readable integer among `keys`, accepting a numeric string as well as a number.
+ *
+ * The coercion is the point: a turn counter arriving as `"3"` is still the ordering the transcript
+ * needs, and rejecting it on type alone is what leaves a transcript unorderable.
+ */
 function firstNumber(entity: TurnEntity, keys: string[]): number | null {
   for (const key of keys) {
     const value = entity[key];
     if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && /^-?\d+$/.test(value.trim())) return Number(value.trim());
+  }
+  return null;
+}
+
+/** Candidate field names for a turn's position and timing, in order of preference. */
+const SEQUENCE_KEYS = ['turnNumber', 'sequenceNumber', 'sequence', 'turnSequenceNumber'];
+const TURN_START_KEYS = ['turnStartTimestamp', 'turnStart', 'turnStartDate', 'startDate'];
+const TURN_END_KEYS = ['turnEndTimestamp', 'turnEnd', 'turnEndDate', 'endDate'];
+
+/**
+ * A date field, preferring the known names but falling back to any plausibly-named key holding a
+ * parseable timestamp.
+ *
+ * The fallback exists because this entity is undocumented and the transcript is unreadable without
+ * some ordering: it is better to discover the field than to render turns in arbitrary order. The
+ * key that matched is reported by the caller so the guess can be replaced with a certainty.
+ */
+function firstDate(
+  entity: TurnEntity,
+  keys: string[],
+  pattern: RegExp,
+): { key: string; value: string } | null {
+  const parseable = (value: unknown): value is string =>
+    typeof value === 'string' && value.length > 0 && !Number.isNaN(Date.parse(value));
+
+  for (const key of keys) {
+    if (parseable(entity[key])) return { key, value: entity[key] as string };
+  }
+  for (const key of Object.keys(entity)) {
+    if (pattern.test(key) && parseable(entity[key])) return { key, value: entity[key] as string };
   }
   return null;
 }
@@ -280,7 +345,7 @@ export function turnKey(entity: TurnEntity): string | null {
     (typeof entity.session?.id === 'string' ? entity.session.id : null) ??
     (typeof entity.conversation?.id === 'string' ? entity.conversation.id : null);
 
-  const sequence = firstNumber(entity, ['sequenceNumber', 'turnNumber', 'sequence']);
+  const sequence = firstNumber(entity, SEQUENCE_KEYS);
   if (owner === null || sequence === null) return null;
   return `${owner}:${sequence}`;
 }
@@ -312,6 +377,8 @@ export async function getReportingTurns(
   const turns: ReportingTurn[] = [];
   let after: string | null = null;
   let synthesised = 0;
+  let unordered = 0;
+  let resolvedStartKey: string | null = null;
   let observedFields: string[] | null = null;
 
   for (let page = 0; page < 30; page += 1) {
@@ -346,18 +413,25 @@ export async function getReportingTurns(
       const natural = turnKey(entity);
       if (natural === null) synthesised += 1;
       const turnId = natural ?? contentKey(entity);
+
+      const start = firstDate(entity, TURN_START_KEYS, /start/i);
+      const end = firstDate(entity, TURN_END_KEYS, /end/i);
+      const sequence = firstNumber(entity, SEQUENCE_KEYS);
+      if (sequence === null) unordered += 1;
+      if (start) resolvedStartKey ??= start.key;
+
       turns.push({
         turnId,
-        sessionId: entity.sessionId ?? null,
+        sessionId: firstString(entity, ['sessionId', 'botSessionId']),
         flowId: entity.botFlowId ?? flowId,
-        conversationId: entity.conversation?.id ?? null,
-        sequence: entity.sequenceNumber ?? null,
+        conversationId: entity.conversation?.id ?? entity.conversationId ?? null,
+        sequence,
         askAction: entity.askAction ?? null,
         askActionResult: entity.askActionResult ?? null,
         userInput: entity.userInput ?? null,
         botPrompts: entity.botPrompts ?? null,
-        turnStart: entity.turnStartTimestamp ?? null,
-        turnEnd: entity.turnEndTimestamp ?? null,
+        turnStart: start?.value ?? null,
+        turnEnd: end?.value ?? null,
         raw: entity,
       });
     }
@@ -374,6 +448,18 @@ export async function getReportingTurns(
       flowId,
       synthesised,
       kept: turns.length,
+      observedFields,
+    });
+  }
+
+  // Ordering is what makes a transcript readable, so losing it is reported explicitly rather than
+  // showing up as a scrambled conversation with no corresponding signal.
+  if (unordered > 0 && turns.length > 0) {
+    logger.warn('ava.reportingturns.unordered', {
+      flowId,
+      unordered,
+      kept: turns.length,
+      resolvedStartKey,
       observedFields,
     });
   }

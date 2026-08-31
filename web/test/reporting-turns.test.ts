@@ -45,6 +45,20 @@ describe('turnKey', () => {
     expect(turnKey({ sessionId: '', sequenceNumber: 1 })).toBeNull();
     expect(turnKey({ sessionId: 'sess-9', sequenceNumber: Number.NaN })).toBeNull();
   });
+
+  // Genesys analytics serialises counters as strings in places. Rejecting those on type alone cost
+  // both the natural key and the transcript ordering, so a numeric string counts as a sequence.
+  it('accepts a sequence delivered as a numeric string', () => {
+    expect(turnKey({ sessionId: 'sess-9', turnNumber: '3' })).toBe('sess-9:3');
+    expect(turnKey({ sessionId: 'sess-9', sequenceNumber: ' 7 ' })).toBe('sess-9:7');
+    expect(turnKey({ sessionId: 'sess-9', turnNumber: '0' })).toBe('sess-9:0');
+  });
+
+  it('does not mistake free text for a sequence', () => {
+    expect(turnKey({ sessionId: 'sess-9', turnNumber: 'third' })).toBeNull();
+    expect(turnKey({ sessionId: 'sess-9', turnNumber: '' })).toBeNull();
+    expect(turnKey({ sessionId: 'sess-9', turnNumber: '2 turns' })).toBeNull();
+  });
 });
 
 describe('cursorFromNextUri', () => {

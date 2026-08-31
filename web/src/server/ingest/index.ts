@@ -6,6 +6,7 @@ import {
   linkExecutionToSession,
   listIngestableFlowIds,
   recordIngestRun,
+  pruneSupersededTurnKeys,
   upsertExecution,
   upsertFlows,
   upsertSessions,
@@ -170,6 +171,9 @@ export async function runTriagePass(): Promise<PassResult> {
       if (turns.length > 0) await upsertTurns(turns);
       turnsSeen += turns.length;
     }
+
+    const prunedTurns = turnsSeen > 0 ? await pruneSupersededTurnKeys() : 0;
+    if (prunedTurns > 0) logger.info('ingest.triage.pruned_superseded_turns', { prunedTurns });
 
     await recordIngestRun({
       kind: 'triage',

@@ -142,6 +142,40 @@ export async function upsertTurns(turns: ReportingTurn[]): Promise<void> {
   }
 }
 
+/**
+ * Drop content-hash turn rows that a natural key has since replaced.
+ *
+ * Turns archived before their sequence field was recognised were keyed by hashing their content.
+ * Once the natural key works, the same turn arrives under a different primary key, so re-ingestion
+ * would leave the transcript showing every turn twice rather than correcting it.
+ *
+ * The count guard is what keeps this from destroying data: hashed rows are only removed for a
+ * session where natural keys account for at least as many turns, so a session that genuinely mixes
+ * both shapes keeps a visible duplicate instead of quietly losing a turn.
+ *
+ * Deliberately unscoped. Superseded rows belong to whatever window was current when they were
+ * written, which is not the window being ingested now, so restricting this to the current batch
+ * would leave the older duplicates in place forever.
+ */
+export async function pruneSupersededTurnKeys(): Promise<number> {
+  const { rowCount } = await sql`
+    WITH tally AS (
+      SELECT session_id,
+             count(*) FILTER (WHERE turn_id LIKE 'sha256:%')     AS hashed,
+             count(*) FILTER (WHERE turn_id NOT LIKE 'sha256:%') AS natural_keys
+      FROM ava_turns
+      WHERE session_id IS NOT NULL
+      GROUP BY session_id
+    )
+    DELETE FROM ava_turns t
+    USING tally
+    WHERE t.session_id = tally.session_id
+      AND t.turn_id LIKE 'sha256:%'
+      AND tally.natural_keys >= tally.hashed
+  `;
+  return rowCount ?? 0;
+}
+
 export interface ExecutionRecord {
   executionId: string;
   flowId: string | null;
@@ -708,7 +742,7 @@ export async function listTurnsForSession(sessionId: string): Promise<TurnRow[]>
   }>`
     SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts, turn_start
     FROM ava_turns WHERE session_id = ${sessionId}
-    ORDER BY sequence_number NULLS LAST, turn_start
+    ORDER BY sequence_number NULLS LAST, turn_start NULLS LAST, turn_id
   `;
   return rows.map((r) => ({
     turnId: r.turn_id,
@@ -733,7 +767,7 @@ export async function listTurnsForConversation(conversationId: string): Promise<
   }>`
     SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts, turn_start
     FROM ava_turns WHERE conversation_id = ${conversationId}
-    ORDER BY sequence_number NULLS LAST, turn_start
+    ORDER BY sequence_number NULLS LAST, turn_start NULLS LAST, turn_id
   `;
   return rows.map((r) => ({
     turnId: r.turn_id,
