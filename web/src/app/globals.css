@@ -658,6 +658,14 @@ code,
   color: var(--ink-faint);
 }
 
+/* A tool call nested under its host item, which is how an AVA action's tools are shown: the flow
+   records one action, and every tool the model chose sits inside it. */
+.tl-tool {
+  margin-top: 10px;
+  padding-left: 11px;
+  border-left: 2px solid var(--gen-azure);
+}
+
 .io-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

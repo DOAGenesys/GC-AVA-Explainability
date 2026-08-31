@@ -1,0 +1,560 @@
+{
+  "flow": {
+    "conversationId": "7a4d8e6d-53de-5891-a916-78f31c24729d",
+    "division": {
+      "id": "546cd35d-dfbb-5044-84bb-0cc21c0b3323"
+    },
+    "endDateTime": "2026-08-31T16:47:45.242Z",
+    "execution": [
+      {
+        "startedFlow": {
+          "dateTime": "2026-08-31T16:46:05.302Z",
+          "languageTag": "en-us",
+          "variables": [
+            {
+              "value": "2026-08-31T16:46:05.257019374Z",
+              "variableId": "__FLOW_START_TIME__",
+              "variableName": "Flow.StartDateTimeUtc"
+            },
+            {
+              "value": false,
+              "variableId": "__FLOW_IS_TEST__",
+              "variableName": "Flow.IsTest"
+            },
+            {
+              "value": "4.0",
+              "variableId": "__FLOW_VERSION__",
+              "variableName": "Flow.Version"
+            },
+            {
+              "value": "en-us",
+              "variableId": "__INTERACTION_LANGUAGE__",
+              "variableName": "Session.Language"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_ACTIVE_INTENT__",
+              "variableName": "Session.ActiveIntent"
+            },
+            {
+              "value": "messaging",
+              "variableId": "__SESSION_CHANNEL_TYPE__",
+              "variableName": "Session.ChannelType"
+            },
+            {
+              "value": "genesyswebwidget",
+              "variableId": "__SESSION_SOURCE__",
+              "variableName": "Session.Source"
+            },
+            {
+              "value": "7a4d8e6d-53de-5891-a916-78f31c24729d",
+              "variableId": "__SESSION_CONVERSATION_ID__",
+              "variableName": "Session.ConversationId"
+            },
+            {
+              "value": "75e2ff3b-fe65-5b6a-83bf-dfa0588e3c96",
+              "variableId": "__EXTERNAL_CONTACT_ID__",
+              "variableName": "Session.ExternalContactId"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_COMPLETED_INTENT__",
+              "variableName": "Session.LastCompletedIntent"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_KNOWLEDGE_QUESTION__",
+              "variableName": "Session.LastKnowledgeQuestion"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_KNOWLEDGE_ANSWER__",
+              "variableName": "Session.LastKnowledgeAnswer"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_KNOWLEDGE_GENERATION__",
+              "variableName": "Session.LastKnowledgeGeneratedAnswer"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_KNOWLEDGE_SEARCH_ID__",
+              "variableName": "Session.LastKnowledgeSearchId"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_COLLECTION_UTTERANCE__",
+              "variableName": "Session.LastCollectionUtterance"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_COLLECTION_CONFIDENCE__",
+              "variableName": "Session.LastCollectionConfidence"
+            },
+            {
+              "value": null,
+              "variableId": "__SESSION_LAST_NLU_COLLECTION_CONFIDENCE__",
+              "variableName": "Session.LastNLUCollectionConfidence"
+            },
+            {
+              "value": false,
+              "variableId": "__MESSAGE_IS_AUTHENTICATED__",
+              "variableName": "Session.IsAuthenticated"
+            }
+          ]
+        }
+      },
+      {
+        "startedBotState": {
+          "dateTime": "2026-08-31T16:46:05.302Z",
+          "executionId": "6c527413-29ba-50fb-b7cc-01cc40462106",
+          "stateId": "cdcddc38-b480-5242-a7c5-6dc77f86310e",
+          "stateName": "Initial Greeting",
+          "variables": []
+        }
+      },
+      {
+        "actionCallAgenticVirtualAgent": {
+          "actionId": "2ba03b80-dd05-5d8b-a0cf-f89b5ac878d6",
+          "actionName": "Call Agentic Virtual Agent",
+          "dateTime": "2026-08-31T16:46:05.305Z",
+          "execution": [
+            {
+              "turn": {
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:46:09.349Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "Hello, I'm Orin from Northwind Field Services. Could you please provide your service ticket reference?"
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "fromParticipant": {
+                  "dateTime": "2026-08-31T16:46:13.175Z",
+                  "digital": {
+                    "dateTime": "2026-08-31T16:46:13.175Z",
+                    "text": "Hi, it's about service ticket FS-70118."
+                  }
+                },
+                "queuedAudioFlushed": false,
+                "tools": [
+                  {
+                    "dataAction": {
+                      "dependencyOnlyInput": {},
+                      "id": "custom_-_7a2d0253-93f8-5f0c-9528-e7c987ee9a6d",
+                      "input": {
+                        "ticket_ref": "FS-70118",
+                        "site_contact_name": "John"
+                      },
+                      "isSecure": false,
+                      "successOutput": "{\"ticket_found\":true,\"ticket_ref\":\"FS-70118\",\"site_contact_name\":\"John\",\"site_code\":\"SITE-AMS-04\",\"site_name\":\"Amsterdam Data Hall 4\",\"asset_class\":\"chiller\",\"priority_band\":\"P2\",\"contract_tier\":\"Platinum\",\"reported_fault\":\"Chiller coolant pressure alarm on unit 2\",\"required_skill_code\":\"hvac_senior\",\"job_duration_hours\":3,\"response_sla_hours\":8,\"lookup_note\":\"Ticket is open and awaiting an engineer visit.\"}"
+                    },
+                    "endDateTime": "2026-08-31T16:46:16.156Z",
+                    "startDateTime": "2026-08-31T16:46:15.756Z",
+                    "toolExecutionId": "2d70bcca-0fa1-5176-a583-6f7316495e1b",
+                    "toolId": "10062119-14cd-5384-839f-16f851b6682f",
+                    "toolName": "lookup_service_ticket"
+                  }
+                ]
+              }
+            },
+            {
+              "turn": {
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:46:20.894Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "John, your site is Amsterdam Data Hall 4 and the reported fault is Chiller coolant pressure alarm on unit 2. As a Platinum contract holder you are owed a response within 8 hours. Could you please let me know which day of the week you would like the visit to take place? Ref: FS-70118"
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "fromParticipant": {
+                  "dateTime": "2026-08-31T16:46:25.373Z",
+                  "digital": {
+                    "dateTime": "2026-08-31T16:46:25.373Z",
+                    "text": "Thursday, please."
+                  }
+                },
+                "queuedAudioFlushed": false,
+                "tools": [
+                  {
+                    "dataAction": {
+                      "dependencyOnlyInput": {},
+                      "id": "custom_-_b01223a0-c728-5776-80f9-18db4d70c88d",
+                      "input": {
+                        "site_code": "SITE-AMS-04",
+                        "access_day": "thursday"
+                      },
+                      "isSecure": false,
+                      "successOutput": "{\"site_code\":\"SITE-AMS-04\",\"site_name\":\"Amsterdam Data Hall 4\",\"access_day\":\"thursday\",\"site_open\":true,\"access_open_local\":\"08:00\",\"access_close_local\":\"18:00\",\"site_timezone\":\"CET\",\"escort_required\":false,\"permit_code\":\"AMS04-PERMIT-2231\",\"access_note\":\"Deliveries and tools enter through the north loading bay.\"}"
+                    },
+                    "endDateTime": "2026-08-31T16:46:30.951Z",
+                    "startDateTime": "2026-08-31T16:46:30.560Z",
+                    "toolExecutionId": "85d7cd83-fff8-59fb-abf2-131d20d5f3e4",
+                    "toolId": "382473e9-7ca4-5be2-a17f-f19266ce8f4f",
+                    "toolName": "get_site_access_window"
+                  }
+                ]
+              }
+            },
+            {
+              "turn": {
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:46:34.446Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "John, the access window on Thursday is 08:00 to 18:00 CET. I will now check the availability of engineers for that day. Ref: FS-70118"
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "fromParticipant": {
+                  "dateTime": "2026-08-31T16:46:37.482Z",
+                  "digital": {
+                    "dateTime": "2026-08-31T16:46:37.482Z",
+                    "text": "Yes, a security escort will be on site."
+                  }
+                },
+                "queuedAudioFlushed": false,
+                "tools": [
+                  {
+                    "dataAction": {
+                      "dependencyOnlyInput": {},
+                      "id": "custom_-_92f340d7-7a42-5683-8eae-ce4b41472d74",
+                      "input": {
+                        "site_code": "SITE-AMS-04",
+                        "skill_code": "hvac_senior",
+                        "slot_day": "thursday",
+                        "job_duration_hours": 3,
+                        "disclosure_mode": "flagged"
+                      },
+                      "isSecure": false,
+                      "successOutput": "{\"site_code\":\"SITE-AMS-04\",\"skill_code\":\"hvac_senior\",\"slot_day\":\"thursday\",\"disclosure_mode\":\"flagged\",\"slot_count\":0,\"bookable_count\":0,\"selection_note\":\"No engineer offered availability at that site for that skill on that day.\",\"slots\":[]}"
+                    },
+                    "endDateTime": "2026-08-31T16:46:43.298Z",
+                    "startDateTime": "2026-08-31T16:46:42.933Z",
+                    "toolExecutionId": "355fc24c-b500-5dcd-a976-33f9659192dd",
+                    "toolId": "ff0d8614-1333-5b02-a713-98336d418fe6",
+                    "toolName": "list_engineer_slots"
+                  }
+                ]
+              }
+            },
+            {
+              "turn": {
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:46:47.231Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "John, I have checked the availability of engineers for Thursday, but unfortunately, no engineers are available for that day. Would you like to consider a different day of the week or would you like me to escalate this to the duty manager? Ref: FS-70118"
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "fromParticipant": {
+                  "dateTime": "2026-08-31T16:46:49.589Z",
+                  "digital": {
+                    "dateTime": "2026-08-31T16:46:49.589Z",
+                    "text": "Yes, please book that slot."
+                  }
+                },
+                "queuedAudioFlushed": false,
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:46:53.206Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "John, I have checked the availability of engineers for Thursday, but unfortunately, no engineers are available for that day. Would you like to consider a different day of the week or would you like me to escalate this to the duty manager? Ref: FS-70118"
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "fromParticipant": {
+                  "dateTime": "2026-08-31T16:46:56.038Z",
+                  "digital": {
+                    "dateTime": "2026-08-31T16:46:56.038Z",
+                    "text": "That's everything, thank you."
+                  }
+                },
+                "queuedAudioFlushed": false,
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:46:58.519Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "Thanks for contacting Northwind Field Services. Take care."
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            }
+          ],
+          "executionId": "ba71e6b6-2970-58eb-95de-435b866cbe0e",
+          "inputData": {
+            "agenticVirtualAgentId": "e94c550b-4a04-5963-ad86-9d90fba23b67",
+            "agenticVirtualAgentName": "AXL APT Benchmark - Field Dispatch Coordinator",
+            "inputs": [
+              {
+                "inputName": "site_contact_name"
+              },
+              {
+                "inputName": "disclosure_mode"
+              }
+            ]
+          },
+          "outputData": {
+            "exitReason": "TriggeredByUser",
+            "outputs": []
+          },
+          "outputPathId": "__SUCCESS__",
+          "outputPathInfo": {
+            "reasonValue": null
+          },
+          "outputVariables": [
+            {
+              "value": "75e2ff3b-fe65-5b6a-83bf-dfa0588e3c96",
+              "variableId": "__EXTERNAL_CONTACT_ID__",
+              "variableName": "Session.ExternalContactId"
+            },
+            {
+              "value": "Yes, a security escort will be on site.",
+              "variableId": "__SESSION_LAST_COLLECTION_UTTERANCE__",
+              "variableName": "Session.LastCollectionUtterance"
+            },
+            {
+              "value": "1.0",
+              "variableId": "__SESSION_LAST_COLLECTION_CONFIDENCE__",
+              "variableName": "Session.LastCollectionConfidence"
+            },
+            {
+              "value": "1.0",
+              "variableId": "__SESSION_LAST_NLU_COLLECTION_CONFIDENCE__",
+              "variableName": "Session.LastNLUCollectionConfidence"
+            },
+            {
+              "value": false,
+              "variableId": "__MESSAGE_IS_AUTHENTICATED__",
+              "variableName": "Session.IsAuthenticated"
+            }
+          ],
+          "trackingId": 12
+        }
+      },
+      {
+        "actionWaitForInput": {
+          "actionId": "631e8565-3868-5628-8c89-35814d9396df",
+          "actionName": "Wait for Input",
+          "dateTime": "2026-08-31T16:46:58.519Z",
+          "execution": [
+            {
+              "turn": {
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:46:58.519Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "What would you like to do?"
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "fromParticipant": {
+                  "dateTime": "2026-08-31T16:47:17.006Z",
+                  "digital": {
+                    "dateTime": "2026-08-31T16:47:17.006Z",
+                    "text": "nothing else, bye"
+                  }
+                },
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:47:17.006Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "Sorry."
+                    },
+                    {
+                      "promptIsNull": false,
+                      "text": "Tell me again what you would like to do."
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            },
+            {
+              "turn": {
+                "fromParticipant": {
+                  "dateTime": "2026-08-31T16:47:26.260Z",
+                  "digital": {
+                    "dateTime": "2026-08-31T16:47:26.260Z",
+                    "text": "end the conversation"
+                  }
+                },
+                "queuedAudioFlushed": false,
+                "toParticipant": {
+                  "dateTime": "2026-08-31T16:47:26.260Z",
+                  "digitalItems": [
+                    {
+                      "promptIsNull": false,
+                      "text": "Sorry."
+                    },
+                    {
+                      "promptIsNull": false,
+                      "text": "Tell me again what you would like to do."
+                    }
+                  ]
+                },
+                "tools": []
+              }
+            }
+          ],
+          "executionId": "d60d75d4-a646-5c04-821c-74239d7c0a3b",
+          "inputData": {
+            "customizeNoMatch": false,
+            "noMatch": {
+              "dateTime": "2026-08-31T16:47:26.260Z",
+              "digitalItems": [
+                {
+                  "promptIsNull": false,
+                  "text": "Tell me again what you would like to do."
+                }
+              ]
+            },
+            "question": {
+              "dateTime": "2026-08-31T16:46:58.519Z",
+              "digitalItems": [
+                {
+                  "promptIsNull": false,
+                  "text": "What would you like to do?"
+                }
+              ]
+            }
+          },
+          "outputVariables": [
+            {
+              "value": "75e2ff3b-fe65-5b6a-83bf-dfa0588e3c96",
+              "variableId": "__EXTERNAL_CONTACT_ID__",
+              "variableName": "Session.ExternalContactId"
+            },
+            {
+              "value": "That's everything, thank you.",
+              "variableId": "__SESSION_LAST_COLLECTION_UTTERANCE__",
+              "variableName": "Session.LastCollectionUtterance"
+            },
+            {
+              "value": "1.0",
+              "variableId": "__SESSION_LAST_COLLECTION_CONFIDENCE__",
+              "variableName": "Session.LastCollectionConfidence"
+            },
+            {
+              "value": "1.0",
+              "variableId": "__SESSION_LAST_NLU_COLLECTION_CONFIDENCE__",
+              "variableName": "Session.LastNLUCollectionConfidence"
+            },
+            {
+              "value": false,
+              "variableId": "__MESSAGE_IS_AUTHENTICATED__",
+              "variableName": "Session.IsAuthenticated"
+            }
+          ],
+          "trackingId": 11
+        }
+      },
+      {
+        "eventSessionDisconnected": {
+          "dateTime": "2026-08-31T16:47:45.242Z",
+          "executionId": "26b1969b-2443-5150-a098-2cdcf0eb552e"
+        }
+      },
+      {
+        "endedBotState": {
+          "dateTime": "2026-08-31T16:47:45.242Z"
+        }
+      },
+      {
+        "endedFlow": {
+          "dateTime": "2026-08-31T16:47:45.242Z",
+          "flowExitReason": "DISCONNECT",
+          "outputVariables": []
+        }
+      }
+    ],
+    "executionId": "2d99a529-a3a9-5bbb-8495-e77669c56a58",
+    "executionInfo": {
+      "characteristics": {
+        "flowCommunications": true,
+        "flowEventError": true,
+        "flowEventOther": true,
+        "flowEventWarning": true,
+        "flowExecutionInputOutputs": true,
+        "flowExecutionItems": true,
+        "flowNames": true,
+        "flowVariables": true
+      },
+      "logLevel": "all"
+    },
+    "flowId": "56155fa0-92cd-574b-b7cf-0fafad91fd2f",
+    "flowIsDebug": false,
+    "flowName": "DO - AVA Explainability",
+    "flowType": "digitalbot",
+    "flowVersion": "4.0",
+    "invokingContext": {
+      "flow": {
+        "flowExecutionId": "81538b3c-44b4-5550-8f34-ad1b6fd54e93",
+        "objectExecutionId": "227ac65d-9641-5482-94b5-d505f7f24c48"
+      }
+    },
+    "isSecure": false,
+    "isTruncated": false,
+    "startDateTime": "2026-08-31T16:46:05.302Z"
+  }
+}

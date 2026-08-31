@@ -245,12 +245,33 @@ export async function runFidelityPass(): Promise<PassResult> {
     }
 
     const conversationIds = pending.map((p) => p.conversation_id);
+    const flowsByConversation = new Map(
+      pending.map((p) => [p.conversation_id, new Set(p.flow_ids ?? [])]),
+    );
     const discovered = await findExecutionIds(conversationIds, INGESTION, budget);
 
     const executionIds: string[] = [];
     const conversationByExecution = new Map<string, string>();
+    let onOtherFlows = 0;
+
     for (const [conversationId, executions] of discovered) {
-      for (const execution of executions) {
+      // A conversation runs several flows - the messaging flow that received it, the bot flow that
+      // answered, and anything it transferred to - so discovery by conversation returns four to six
+      // executions where only one explains the AVA session. Retrieving the rest would spend a job
+      // slot each on traces containing no AVA action, and would leave the session view liable to
+      // show the wrong flow's trace entirely.
+      const sessionFlows = flowsByConversation.get(conversationId);
+      const onSessionFlow = sessionFlows?.size
+        ? executions.filter((e) => sessionFlows.has(e.flowId))
+        : [];
+
+      // Falling back to everything matters for the worklist rather than for the data: a
+      // conversation that records no execution at all never leaves the pending set, and would be
+      // re-queried on every cron for as long as its sessions stay inside the retention window.
+      const wanted = onSessionFlow.length > 0 ? onSessionFlow : executions;
+      onOtherFlows += executions.length - wanted.length;
+
+      for (const execution of wanted) {
         executionIds.push(execution.executionId);
         conversationByExecution.set(execution.executionId, conversationId);
       }
@@ -318,6 +339,10 @@ export async function runFidelityPass(): Promise<PassResult> {
       apiCallsPerExecution: outcome.apiCallsPerExecution,
       detail: {
         conversationsAsked: conversationIds.length,
+        // Executions skipped for belonging to another flow in the same conversation. This is the
+        // measure of what conversation-scoped discovery over-returns, and it should stay well above
+        // zero: a sudden zero means sessions have stopped carrying a usable flow id.
+        executionsOnOtherFlows: onOtherFlows,
         jobs: outcome.jobs,
         jobApiCalls: outcome.jobApiCalls,
         byPath: budget.byPath,
@@ -358,10 +383,13 @@ export async function runFidelityPass(): Promise<PassResult> {
  */
 async function pendingConversations(
   limit: number,
-): Promise<{ rows: { conversation_id: string }[] }> {
+): Promise<{ rows: { conversation_id: string; flow_ids: string[] }[] }> {
   const { sql } = await import('@vercel/postgres');
-  return sql<{ conversation_id: string }>`
-    SELECT DISTINCT s.conversation_id
+  // The bot flows that produced sessions on this conversation come back with it, because a
+  // conversation contains several flow executions and only these ones explain an AVA session.
+  return sql<{ conversation_id: string; flow_ids: string[] }>`
+    SELECT s.conversation_id,
+           array_remove(array_agg(DISTINCT s.flow_id), NULL) AS flow_ids
     FROM ava_sessions s
     WHERE s.conversation_id IS NOT NULL
       AND s.date_created > now() - interval '9 days'
@@ -370,6 +398,7 @@ async function pendingConversations(
         WHERE e.conversation_id = s.conversation_id
           AND e.retrieval_status IN ('ARCHIVED', 'NO_HISTORY')
       )
+    GROUP BY s.conversation_id
     ORDER BY s.conversation_id
     LIMIT ${limit}
   `;

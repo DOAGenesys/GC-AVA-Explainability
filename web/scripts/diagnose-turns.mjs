@@ -86,6 +86,21 @@ function describeShape(node, path = '', depth = 0) {
   );
 }
 
+/**
+ * Build the body `POST /flows/instances/query` actually expects.
+ *
+ * A CriteriaQuery: `query` holds CriteriaGroups, each with and/or/not arrays of CriteriaItem
+ * {key, operator, value}. The `criteriaKey`/`values` spelling belongs to the querycapabilities
+ * *response* and is silently unmatched here, so getting this wrong returns 200 with an empty list -
+ * identical to an org that captures no execution data.
+ *
+ * @param {string} key
+ * @param {string} value
+ */
+function criteriaQuery(key, value) {
+  return { query: [{ and: [{ key, operator: 'eq', value }] }] };
+}
+
 try {
   // ------------------------------------------------------------------ what is in the archive
   heading('archive contents');
@@ -332,9 +347,7 @@ try {
         const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=50`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            criteria: [{ criteriaKey: 'FlowId', values: [flow.flow_id], operator: 'eq' }],
-          }),
+          body: JSON.stringify(criteriaQuery('FlowId', flow.flow_id)),
         });
         const text = await res.text();
         let count = 'n/a';
@@ -386,9 +399,7 @@ try {
         const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=50`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            criteria: [{ criteriaKey: 'FlowId', values: [parent.flow_id], operator: 'eq' }],
-          }),
+          body: JSON.stringify(criteriaQuery('FlowId', parent.flow_id)),
         });
         let detail = `HTTP ${res.status}`;
         try {
@@ -432,34 +443,40 @@ try {
 
       console.log(`\nprobing ${conversationIds.length} archived conversation ids`);
 
-      // Three variants, because each failure mode returns 200 with an empty list and they are
-      // otherwise indistinguishable: operator casing (querycapabilities reports lowercase `eq`,
-      // and an unrecognised operator matching nothing looks exactly like absent data), and whether
-      // a multi-value list is honoured or only its first entry is.
-      const variants = [
-        { label: 'all ids, operator eq', values: conversationIds, operator: 'eq' },
-        { label: 'one id, operator eq', values: conversationIds.slice(0, 1), operator: 'eq' },
-        { label: 'one id, operator EQ', values: conversationIds.slice(0, 1), operator: 'EQ' },
+      // One call per conversation, because a CriteriaItem carries a single `value` - there is no
+      // multi-value form to fall back on. The superseded body is sent once as a control: it is the
+      // shape this tool and the ingest path both used while reporting "no execution data", and
+      // seeing the two answers side by side is what identifies that as the cause.
+      const probes = [
+        ...conversationIds.map((id) => ({
+          label: `ConversationId ${id}`,
+          body: criteriaQuery('ConversationId', id),
+        })),
+        {
+          label: 'control: superseded criteria/criteriaKey/values body',
+          body: {
+            criteria: [{ criteriaKey: 'ConversationId', values: conversationIds, operator: 'eq' }],
+          },
+        },
       ];
 
-      for (const { label, values, operator } of variants) {
-        if (values.length === 0) continue;
+      for (const { label, body } of probes) {
         const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=200`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            criteria: [{ criteriaKey: 'ConversationId', values, operator }],
-          }),
+          body: JSON.stringify(body),
         });
         const text = await res.text();
         console.log(`\n${label}: HTTP ${res.status}`);
         try {
-          const body = JSON.parse(text);
-          if (!res.ok) console.log('error body:', JSON.stringify(body).slice(0, 600));
+          const parsed = JSON.parse(text);
+          if (!res.ok) console.log('error body:', JSON.stringify(parsed).slice(0, 600));
           else {
-            console.log(`entities returned: ${(body.entities ?? []).length}`);
-            if ((body.entities ?? []).length > 0) {
-              console.log('entity field names:', Object.keys(body.entities[0]).join(', '));
+            const entities = parsed.entities ?? [];
+            console.log(`entities returned: ${entities.length}`);
+            if (entities.length > 0) {
+              console.log('entity field names:', Object.keys(entities[0]).join(', '));
+              console.log('execution ids:', entities.map((e) => e.id).join(', '));
             }
           }
         } catch {

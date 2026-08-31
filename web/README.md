@@ -178,15 +178,51 @@ state in the schema: re-asking costs API budget to learn nothing.
 
 ## Data sources
 
-| Source                                   | Cost                         | Retention   | Gives                                                                                    |
-| ---------------------------------------- | ---------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
-| `analytics/botflows/{id}/sessions`       | 1 call per flow per window   | Long        | Classified outcome per session. The cheapest AVA signal that exists.                     |
-| `analytics/botflows/{id}/reportingturns` | 1 call per flow per window   | **10 days** | Per-turn transcript. Gains tool/knowledge/guardrail metadata on 31 Aug 2026.             |
-| `flows/instances/query`                  | 1 call per ~50 conversations | —           | Discovery: conversation id → execution id.                                               |
-| `flows/instances/jobs`                   | 2 calls per 10 executions    | ~10 days    | **Full AVA internals**: ordered actions, tool inputs and outputs, output paths, timings. |
+| Source                                   | Cost                       | Retention   | Gives                                                                                    |
+| ---------------------------------------- | -------------------------- | ----------- | ---------------------------------------------------------------------------------------- |
+| `analytics/botflows/{id}/sessions`       | 1 call per flow per window | Long        | Classified outcome per session. The cheapest AVA signal that exists.                     |
+| `analytics/botflows/{id}/reportingturns` | 1 call per flow per window | **10 days** | Per-turn transcript. Gains tool/knowledge/guardrail metadata on 31 Aug 2026.             |
+| `flows/instances/query`                  | 1 call per conversation    | —           | Discovery: conversation id → execution id.                                               |
+| `flows/instances/jobs`                   | 2 calls per 10 executions  | ~10 days    | **Full AVA internals**: ordered actions, tool inputs and outputs, output paths, timings. |
 
 Deliberately unused: `GET /flows/instances/{id}`. It creates a job internally, so it costs a job
 while carrying a single execution — strictly worse than batching.
+
+### Three traps in the discovery contract
+
+All three fail silently, and all three cost real time to find.
+
+**The request body is a `CriteriaQuery`, and it is not the shape `querycapabilities` describes.**
+`GET /flows/instances/querycapabilities` answers with `criteria: [{ criteriaKey, dataType, operators }]`,
+but the query itself takes `query: [{ and: [{ key, operator, value }] }]` — different field names, and
+`value` is **singular**, so there is no multi-value batching to be had — and an `or` group of several
+`ConversationId` predicates, the obvious way to restore it, is rejected with a bare
+`422 "input data is not valid"`. Discovery therefore costs one call per conversation. Sending the
+capabilities spelling is not reported as an error either: the endpoint answers `200` with an empty
+entity list, indistinguishable from an org that captures no execution data. The criteria are gated
+per org rather than by the OpenAPI enum, so anything outside `querycapabilities` fails with
+`400 "Attempting to query with unallowed capabilities"` — in this org that excludes
+`FlowStartDateTime` and `FlowEndDateTime`.
+
+**Discovery by conversation returns every flow the conversation ran, not the one you asked about.**
+A single messaging conversation yields four to six executions — the inbound message flow that
+received it, the digital bot flow that answered, and anything it transferred to. Only the bot flow's
+execution explains an AVA session. Retrieving all of them would spend a Jobs slot each on traces
+with no AVA action in them, and would leave the session view liable to render the wrong flow's
+trace. The fidelity pass therefore keeps only executions whose `flowId` matches a flow that produced
+sessions on that conversation, and the session queries prefer the session's own flow ahead of
+recency. It falls back to keeping everything when nothing matches, because a conversation that
+records no execution at all never leaves the pending worklist.
+
+**An AVA's tool calls are not `actionCallData` items.** A flow that delegates to an AVA records a
+single `actionCallAgenticVirtualAgent` item, and every tool the model chose is nested inside it at
+`.execution[].turn.tools[]`, one array per conversational turn. A parser that walks only the top
+level of `flow.execution` returns zero tool calls for exactly the executions worth explaining. The
+nested form also differs in substance: `dataAction.input` is already an object rather than
+name/value pairs, `successOutput` is the response as a JSON **string**, success is marked by that
+field's presence rather than by any status, and each tool carries its own `startDateTime` /
+`endDateTime` — so tool latency is measured rather than inferred from the next flow item.
+`test/execution-trace.test.ts` pins all of this to an unedited Architect export.
 
 ## Ingestion
 
@@ -399,6 +435,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 | Cron routes return 401               | `CRON_SECRET` mismatch between the environment and what Vercel sends.                                                                                                 |
 | Transcript coverage below 100%       | Ingestion fell behind the ten-day retention window. Anything past it is unrecoverable.                                                                                |
 | Sessions ingested but zero turns     | Run `npm run db:diagnose`. It separates "ingestion never ran" from "the platform returned no turns" from "we failed to parse them", which need different fixes.       |
+| Sessions ingested but zero traces    | Run `npm run probe:execution` with an execution id from an Architect export. A malformed discovery query and an org with no execution data both report as zero.       |
 
 **Diagnosing empty data.** `npm run db:diagnose` is read-only and prints the evidence for each
 competing explanation: archive row counts, the last fifteen `ingest_runs` with their per-pass
@@ -414,6 +451,21 @@ $env:GENESYS_INGEST_CLIENT_SECRET='...'
 $env:GENESYS_REGION='mypurecloud.de'
 npm run db:diagnose
 ```
+
+**Diagnosing empty traces.** When sessions arrive but no execution ever does, the question is
+whether the archive can see the executions or whether the query is being rejected. Both answer
+`200` with an empty list, so the only way to separate them is to ask about an execution known to
+exist. Export execution data for a recent run from Architect: the execution id is in the filename.
+
+```powershell
+$env:GENESYS_INGEST_CLIENT_ID='...'
+$env:GENESYS_INGEST_CLIENT_SECRET='...'
+$env:GENESYS_REGION='mypurecloud.de'
+npm run probe:execution -- --execution <id> --conversation <id> --flow <id>
+```
+
+It reports the divisions the credential can see, the flow's own division, this org's permitted
+criteria, whether the Jobs API will return that execution, and which query body shapes match it.
 
 ## Limitations and known unknowns
 

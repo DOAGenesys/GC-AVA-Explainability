@@ -115,7 +115,9 @@ export default async function CoveragePage() {
                   republished after it was enabled since capture is never backfilled, and the ingest
                   credential holding Architect → Flow Instance → View and Search for the flow&apos;s
                   division. A credential missing either permission is shown zero instances rather
-                  than being refused.
+                  than being refused. Confirm the query itself still works before concluding any of
+                  the above, with <code>node scripts/probe-execution.mjs</code> against an execution
+                  id taken from an Architect export — a rejected query also reports as zero.
                 </td>
               </tr>
               <tr>

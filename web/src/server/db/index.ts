@@ -255,12 +255,30 @@ export async function upsertExecution(record: ExecutionRecord): Promise<void> {
         ${call.toolName}, ${call.category}, ${call.succeeded}, ${call.outputPathReason},
         ${call.outputPathReasonValue}, ${call.latencyMs}, ${nullableTimestamp(call.at)},
         ${JSON.stringify(call.inputs)}, ${JSON.stringify(call.outputs)})
+      -- Every column is refreshed, not just the outcome. The ordinal counts tool calls, so what a
+      -- given ordinal refers to can change when the parser improves; updating the outcome while
+      -- leaving the old name and inputs in place would silently fabricate a row that never happened.
       ON CONFLICT (execution_id, ordinal) DO UPDATE SET
+        flow_id = EXCLUDED.flow_id,
+        conversation_id = EXCLUDED.conversation_id,
+        tool_name = EXCLUDED.tool_name,
+        category = EXCLUDED.category,
         succeeded = EXCLUDED.succeeded,
-        outputs = EXCLUDED.outputs,
-        latency_ms = EXCLUDED.latency_ms
+        output_path_reason = EXCLUDED.output_path_reason,
+        output_path_reason_value = EXCLUDED.output_path_reason_value,
+        latency_ms = EXCLUDED.latency_ms,
+        occurred_at = EXCLUDED.occurred_at,
+        inputs = EXCLUDED.inputs,
+        outputs = EXCLUDED.outputs
     `;
   }
+
+  // A re-parse can yield fewer calls than an earlier pass recorded. Upserting alone would leave the
+  // surplus rows behind, where they would keep being counted as tool calls that happened.
+  await sql`
+    DELETE FROM ava_tool_calls
+    WHERE execution_id = ${record.executionId} AND ordinal >= ${t.toolCalls.length}
+  `;
 }
 
 /** Attach discovered execution ids to their session, so coverage can be computed per session. */
@@ -470,12 +488,14 @@ export async function listSessions(days: number, limit: number): Promise<Session
            e.execution_id, e.retrieval_status, e.tool_call_count
     FROM ava_sessions s
     LEFT JOIN ava_flows f ON f.flow_id = s.flow_id
-    -- At most one execution per session; the newest wins if a conversation re-entered the flow.
+    -- At most one execution per session. A conversation holds an execution for every flow it ran,
+    -- so the session's own flow is preferred before recency - otherwise the messaging flow that
+    -- merely received the conversation can outrank the bot flow that answered it.
     LEFT JOIN LATERAL (
       SELECT execution_id, retrieval_status, tool_call_count
       FROM ava_executions x
       WHERE x.conversation_id = s.conversation_id
-      ORDER BY x.start_date_time DESC NULLS LAST
+      ORDER BY (x.flow_id = s.flow_id) DESC NULLS LAST, x.start_date_time DESC NULLS LAST
       LIMIT 1
     ) e ON TRUE
     WHERE s.date_created > now() - (${days} || ' days')::interval
@@ -702,11 +722,15 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
            e.execution_id, e.retrieval_status
     FROM ava_sessions s
     LEFT JOIN ava_flows f ON f.flow_id = s.flow_id
+    -- Same flow-first preference as the list, ahead of the existing bias towards a trace that was
+    -- actually archived: showing the wrong flow's trace is worse than showing none.
     LEFT JOIN LATERAL (
       SELECT execution_id, retrieval_status
       FROM ava_executions x
       WHERE x.conversation_id = s.conversation_id
-      ORDER BY x.retrieval_status = 'ARCHIVED' DESC, x.start_date_time DESC NULLS LAST
+      ORDER BY (x.flow_id = s.flow_id) DESC NULLS LAST,
+               x.retrieval_status = 'ARCHIVED' DESC,
+               x.start_date_time DESC NULLS LAST
       LIMIT 1
     ) e ON TRUE
     WHERE s.session_id = ${sessionId}

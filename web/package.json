@@ -19,6 +19,7 @@
     "test": "vitest run",
     "db:init": "node scripts/init-db.mjs",
     "db:diagnose": "node scripts/diagnose-turns.mjs",
+    "probe:execution": "node scripts/probe-execution.mjs",
     "check": "npm run format:check && npm run lint:strict && npm run typecheck && npm run test"
   },
   "dependencies": {

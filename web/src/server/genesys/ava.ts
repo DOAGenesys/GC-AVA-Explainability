@@ -513,6 +513,9 @@ export async function getReportingTurns(
 
 // --------------------------------------------------------------------------- execution discovery
 
+/** Enough parallelism to drain a backlog within a cron invocation, well short of rate limiting. */
+const DISCOVERY_CONCURRENCY = 4;
+
 /**
  * Resolve conversation ids to flow execution ids.
  *
@@ -521,6 +524,10 @@ export async function getReportingTurns(
  * capabilities actually permit, and because the triage pass has already produced conversation ids
  * for free. No temporal criterion is available, so the window is expressed by which conversations
  * are asked about rather than by a date filter.
+ *
+ * The criteria vocabulary is gated per org rather than by the OpenAPI enum, so what is permitted
+ * comes from `GET /flows/instances/querycapabilities` and nothing else. Asking outside it fails
+ * with 400 "Attempting to query with unallowed capabilities".
  */
 export async function findExecutionIds(
   conversationIds: string[],
@@ -533,61 +540,87 @@ export async function findExecutionIds(
   >();
   if (conversationIds.length === 0) return byConversation;
 
-  // The criteria value list is the batching mechanism here, so discovery for a whole cron window
-  // costs a handful of calls rather than one per conversation.
-  const CHUNK = 50;
-  for (let start = 0; start < conversationIds.length; start += CHUNK) {
-    const chunk = conversationIds.slice(start, start + CHUNK);
-    const res = await genesysRequest<{
-      entities?: {
-        id?: string;
-        flowId?: string;
-        flowVersion?: string;
-        conversationId?: string;
-      }[];
-    }>({
-      path: '/api/v2/flows/instances/query',
-      method: 'POST',
-      query: { pageSize: 200 },
-      body: {
-        // Lowercase `eq` is what querycapabilities reports for this criteria. The endpoint answers
-        // 200 either way, so a wrong operator would look exactly like an org with no execution data.
-        criteria: [{ criteriaKey: 'ConversationId', values: chunk, operator: 'eq' }],
-      },
-      identity,
-      budget,
-      expectedStatuses: [404, 422],
-    });
+  // One conversation per request, and this is a constraint rather than a choice. A CriteriaItem
+  // carries a single `value`, and an `or` group of several ConversationId predicates - the obvious
+  // way to restore batching - is rejected with a bare 422 "input data is not valid". So the cost is
+  // one call per conversation, and concurrency is what keeps a backlog inside the cron's wall clock.
+  const queue = [...new Set(conversationIds)];
+  let cursor = 0;
+  let failed = 0;
 
-    if (!res.ok || !res.data) {
-      logger.warn('ava.discovery.query_failed', { status: res.status, chunk: chunk.length });
-      continue;
-    }
+  async function drain(): Promise<void> {
+    while (cursor < queue.length) {
+      const conversationId = queue[cursor]!;
+      cursor += 1;
 
-    for (const entity of res.data.entities ?? []) {
-      if (!entity.id || !entity.conversationId) continue;
-      const list = byConversation.get(entity.conversationId) ?? [];
-      list.push({
-        executionId: entity.id,
-        flowId: entity.flowId ?? '',
-        flowVersion: entity.flowVersion ?? null,
+      const res = await genesysRequest<{
+        entities?: {
+          id?: string;
+          flowId?: string;
+          flowVersion?: string;
+          conversationId?: string;
+        }[];
+      }>({
+        path: '/api/v2/flows/instances/query',
+        method: 'POST',
+        query: { pageSize: 200 },
+        body: {
+          // A CriteriaQuery: `query` holds CriteriaGroups, each with and/or/not arrays of
+          // CriteriaItem {key, operator, value}. The plural `criteriaKey`/`values` spelling belongs
+          // to the querycapabilities *response*, and sending it here is not an error the endpoint
+          // reports - it answers 200 with an empty list, which is indistinguishable from an org
+          // that captures no execution data. That cost weeks, hence the specificity of this note.
+          query: [{ and: [{ key: 'ConversationId', operator: 'eq', value: conversationId }] }],
+        },
+        identity,
+        budget,
+        expectedStatuses: [404, 422],
       });
-      byConversation.set(entity.conversationId, list);
+
+      if (!res.ok || !res.data) {
+        failed += 1;
+        logger.warn('ava.discovery.query_failed', { status: res.status, conversationId });
+        continue;
+      }
+
+      const found: { executionId: string; flowId: string; flowVersion: string | null }[] = [];
+      for (const entity of res.data.entities ?? []) {
+        // `id` is the execution id; the entity is not required to echo the conversation back, so
+        // the id we asked with is the one used for keying.
+        if (!entity.id) continue;
+        found.push({
+          executionId: entity.id,
+          flowId: entity.flowId ?? '',
+          flowVersion: entity.flowVersion ?? null,
+        });
+      }
+      if (found.length > 0) byConversation.set(conversationId, found);
     }
   }
 
-  // Asked-versus-matched is reported because this query answers 200 with an empty list for several
-  // unrelated reasons, and they need different responses. Nothing matched usually means the org
-  // never captured execution data. A partial match would instead suggest the batched criteria only
-  // honours some of its values, which would silently halve trace coverage.
+  const workers = Math.min(DISCOVERY_CONCURRENCY, queue.length);
+  await Promise.all(Array.from({ length: workers }, () => drain()));
+
+  // Asked, matched and failed are reported together because a 200 with an empty list is the
+  // endpoint's answer to several unrelated situations, and they need different responses. Failures
+  // are counted separately so a rejected query can never again be read as an org that captures no
+  // execution data.
   const matched = byConversation.size;
   if (conversationIds.length > 0 && matched === 0) {
     logger.warn('ava.discovery.no_executions', {
       asked: conversationIds.length,
-      hint: 'Execution data storage is off by default: Admin > Organization Settings > Settings > Execution Data, then republish the flows.',
+      failed,
+      hint:
+        failed > 0
+          ? 'Every query was rejected. Check the criteria against GET /flows/instances/querycapabilities.'
+          : 'Queries succeeded and matched nothing. Execution data storage is off by default: Admin > Organization Settings > Settings > Execution Data, then republish the flows.',
     });
   } else if (matched < conversationIds.length) {
-    logger.info('ava.discovery.partial_match', { asked: conversationIds.length, matched });
+    logger.info('ava.discovery.partial_match', {
+      asked: conversationIds.length,
+      matched,
+      failed,
+    });
   }
 
   return byConversation;
@@ -865,16 +898,61 @@ export interface TraceItemPayload {
     actionName?: string;
     categoryName?: string;
     inputs?: { inputName?: string; value?: unknown }[];
+    agenticVirtualAgentId?: string;
+    agenticVirtualAgentName?: string;
     [key: string]: unknown;
   };
   outputData?: {
     successOutputs?: { outputName?: string; value?: unknown }[];
     failureOutputs?: { outputName?: string; value?: unknown }[];
+    /** Why the AVA handed control back, e.g. `TriggeredByUser`. */
+    exitReason?: string;
   };
+  /**
+   * The AVA's own turn-by-turn execution, present only on `actionCallAgenticVirtualAgent`.
+   *
+   * This is where an AVA's tool calls live. The flow sees one action; everything the model decided
+   * is nested in here.
+   */
+  execution?: TraceAvaTurn[];
   variables?: { variableName?: string; value?: unknown }[];
   outputVariables?: { variableName?: string; value?: unknown }[];
   error?: unknown;
   warning?: unknown;
+}
+
+/**
+ * One tool the AVA invoked, as recorded inside an AVA action.
+ *
+ * An AVA's tools are Data Actions, so `dataAction` carries the same substance as a flow-level
+ * `actionCallData` item - but shaped differently: `input` is already an object rather than
+ * name/value pairs, and `successOutput` is the response as a JSON *string*.
+ */
+export interface TraceAvaTool {
+  toolName?: string;
+  toolId?: string;
+  toolExecutionId?: string;
+  startDateTime?: string;
+  endDateTime?: string;
+  dataAction?: {
+    id?: string;
+    input?: Record<string, unknown>;
+    successOutput?: string;
+    failureOutput?: string;
+    isSecure?: boolean;
+  };
+}
+
+/** One conversational turn inside an AVA action: who said what, and which tools it ran. */
+export interface TraceAvaTurn {
+  turn?: {
+    fromParticipant?: { dateTime?: string; digital?: { dateTime?: string; text?: string } };
+    toParticipant?: {
+      dateTime?: string;
+      digitalItems?: { text?: string; promptIsNull?: boolean }[];
+    };
+    tools?: TraceAvaTool[];
+  };
 }
 
 export interface NormalizedTraceItem {
@@ -889,7 +967,15 @@ export interface NormalizedTraceItem {
 }
 
 export interface ToolCall {
+  /**
+   * Call order within the execution, and the archive's key alongside the execution id.
+   *
+   * This counts tool calls rather than timeline items, because one AVA action hosts many calls and
+   * they would otherwise collide on a shared item index.
+   */
   ordinal: number;
+  /** The timeline item this call was made from, so the UI can group calls under their host. */
+  parentOrdinal: number;
   toolName: string;
   category: string | null;
   at: string | null;
@@ -932,6 +1018,37 @@ function pairsToRecord(
     if (name) out[name] = pair.value ?? null;
   }
   return out;
+}
+
+/**
+ * Recover the Data Action category from its id, which is formatted `{category}_-_{guid}`.
+ *
+ * The nested form carries no `categoryName`, and the category is worth keeping because it is how a
+ * custom action is told apart from an integration's own.
+ */
+function categoryFromDataActionId(id: string | undefined): string | null {
+  if (!id) return null;
+  const at = id.indexOf('_-_');
+  return at > 0 ? id.slice(0, at) : null;
+}
+
+/**
+ * Read a nested tool's output, which arrives as a JSON string rather than as a value.
+ *
+ * A non-JSON body is kept verbatim under `output` rather than discarded: a tool that returned
+ * plain text is still evidence, and losing it would misreport the call as having returned nothing.
+ */
+function parseToolOutput(raw: string | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return { output: parsed };
+  } catch {
+    return { output: raw };
+  }
 }
 
 function msBetween(a: string | null | undefined, b: string | null | undefined): number | null {
@@ -988,6 +1105,37 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
       botStates.push({ ordinal: item.ordinal, stateName: item.payload.stateName, at: item.at });
     }
 
+    // An AVA action hosts its tool calls internally, one `tools` array per conversational turn.
+    // Reading only the top level reports zero tool calls for precisely the executions this archive
+    // exists to explain, because a flow that delegates to an AVA has no `actionCallData` items.
+    if (item.kind === 'actionCallAgenticVirtualAgent') {
+      for (const wrapper of item.payload.execution ?? []) {
+        for (const tool of wrapper.turn?.tools ?? []) {
+          const action = tool.dataAction;
+          // There is no status field. A call that came back on the success path has a
+          // `successOutput`, and its absence is what marks the failure path.
+          const succeeded = typeof action?.successOutput === 'string';
+
+          toolCalls.push({
+            ordinal: toolCalls.length,
+            parentOrdinal: item.ordinal,
+            toolName: tool.toolName ?? '(unnamed tool)',
+            category: categoryFromDataActionId(action?.id),
+            at: tool.startDateTime ?? item.at,
+            succeeded,
+            outputPathReason: null,
+            outputPathReasonValue: null,
+            inputs: action?.input ?? {},
+            outputs: parseToolOutput(succeeded ? action?.successOutput : action?.failureOutput),
+            // Each nested call carries its own start and end, so this latency is measured rather
+            // than inferred from whatever the flow happened to do next.
+            latencyMs: msBetween(tool.startDateTime, tool.endDateTime),
+          });
+        }
+      }
+      return;
+    }
+
     if (item.kind !== 'actionCallData') return;
 
     const successOutputs = item.payload.outputData?.successOutputs ?? [];
@@ -995,7 +1143,8 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
     const succeeded = successOutputs.length > 0 && failureOutputs.length === 0;
 
     toolCalls.push({
-      ordinal: item.ordinal,
+      ordinal: toolCalls.length,
+      parentOrdinal: item.ordinal,
       toolName: item.payload.actionName ?? item.payload.inputData?.actionName ?? '(unnamed action)',
       category: item.payload.inputData?.categoryName ?? null,
       at: item.at,
