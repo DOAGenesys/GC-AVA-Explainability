@@ -132,8 +132,10 @@ try {
   `);
   console.table(mapping);
   console.log(
-    'null_sequence and null_turn_start both high means the transcript cannot be ordered, which is\n' +
-      'what produces a scrambled transcript and a "TURN ?" label.',
+    'null_sequence is expected to equal the turn count: the platform sends no turn number at all.\n' +
+      'null_turn_start is the one that matters - dateCreated is the only ordering available, so a\n' +
+      'non-zero count there means those turns cannot be placed in the transcript.\n' +
+      'content_hashed_keys above zero means turns archived before keying worked are still present.',
   );
 
   // Fidelity discovery is driven entirely by session conversation ids, so a null column here is a
@@ -359,6 +361,47 @@ try {
         LIMIT 5
       `);
       const conversationIds = convRows.map((r) => r.conversation_id);
+      // Control group. Every flow probed above is a bot or digital bot flow, so if none of them has
+      // execution data the result is ambiguous: either the org records nothing, or bot flows
+      // specifically are not recorded this way. A non-bot flow with instances settles it.
+      heading('control: does the org capture execution data for any flow type at all');
+
+      for (const type of ['inboundshortmessage', 'inboundcall', 'workflow']) {
+        const listRes = await fetch(
+          `https://${apiHost}/api/v2/flows?type=${type}&pageSize=3&pageNumber=1`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!listRes.ok) {
+          console.log(`${type}: flow list HTTP ${listRes.status}`);
+          continue;
+        }
+        const listed = (await listRes.json()).entities ?? [];
+        if (listed.length === 0) {
+          console.log(`${type}: no flows of this type in the org`);
+          continue;
+        }
+
+        for (const flow of listed) {
+          const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=50`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              criteria: [{ criteriaKey: 'FlowId', values: [flow.id], operator: 'eq' }],
+            }),
+          });
+          let detail = `HTTP ${res.status}`;
+          try {
+            const body = await res.json();
+            detail += res.ok
+              ? `, instances: ${(body.entities ?? []).length}`
+              : `, ${JSON.stringify(body).slice(0, 150)}`;
+          } catch {
+            /* status alone is enough to interpret this */
+          }
+          console.log(`${type} "${flow.name}": ${detail}`);
+        }
+      }
+
       console.log(`\nprobing ${conversationIds.length} archived conversation ids`);
 
       // Three variants, because each failure mode returns 200 with an empty list and they are
