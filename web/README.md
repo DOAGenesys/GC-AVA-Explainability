@@ -296,7 +296,7 @@ summary.
 | `APP_SESSION_SECRET`            | ✅       | Signs the app session, encrypts Genesys tokens in the cookie.        |
 | `GENESYS_INGEST_CLIENT_ID`      | ✅       | Client-credentials identity for cron.                                |
 | `GENESYS_INGEST_CLIENT_SECRET`  | ✅       | As above.                                                            |
-| `GENESYS_REGION`                | ✅       | Region the ingestion talks to, e.g. `mypurecloud.de`.                |
+| `GENESYS_REGION`                | ✅       | Ingestion region, e.g. `mypurecloud.de`. Also the sign-in default.   |
 | `CRON_SECRET`                   | ✅       | Authorises the cron routes.                                          |
 | `POSTGRES_URL`                  | ✅       | Provided automatically by an attached Vercel Postgres store.         |
 | `AVA_FLOW_IDS`                  |          | Pin ingestion to specific flows. Empty means every AVA-enabled flow. |
@@ -318,6 +318,13 @@ http://localhost:3000/api/auth/callback          # for local development
 ```
 
 Users enter this client's id on the sign-in page; it is not configured as an environment variable.
+The sign-in page shows the exact redirect URI to authorise, with a one-click copy — derived from the
+request's forwarded headers, so it is byte-identical to the `redirect_uri` the server sends to
+Genesys rather than a guess that might not match behind a proxy.
+
+The region field is seeded from `GENESYS_REGION` but is only a **default**: a previously used region
+on that browser takes precedence, and a user can always type another one to sign in to a different
+region or org.
 
 **2. Ingestion** — grant type _Client Credentials_, with a role granting:
 

@@ -17,11 +17,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               reason as on the sign-in page: SVG needs no optimizer. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/images/brand/genesys-cloud-horizontal-white.svg"
-            alt="Genesys Cloud"
+            src="/images/brand/genesys-logo-white.svg"
+            alt="Genesys"
             className="brand-logo"
-            width={158}
-            height={19}
+            width={150}
+            height={28}
           />
           <span className="brand-product">AVA Observability</span>
         </Link>

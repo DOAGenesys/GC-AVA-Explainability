@@ -127,8 +127,142 @@ h3 {
   letter-spacing: 0.1em;
 }
 
-.login-card .brand-logo {
-  margin-bottom: 20px;
+/* White plate behind the full-colour logo, so it always sits on an approved light background. */
+.brand-lockup {
+  display: flex;
+  justify-content: center;
+  background: var(--gen-white);
+  border-radius: 16px;
+  padding: 12px 18px;
+  margin-bottom: 18px;
+}
+
+.login-card .eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gen-orange);
+  text-align: center;
+}
+
+.login-card h1 {
+  text-align: center;
+}
+
+.login-card .login-lede {
+  color: var(--ink-muted);
+  font-size: 13.5px;
+  margin: 0 0 22px;
+  text-align: center;
+}
+
+/* ----------------------------------------------------------------- help tooltip */
+
+.label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tip {
+  position: relative;
+  display: inline-flex;
+}
+
+.tip-trigger {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-faint);
+  display: inline-grid;
+  place-items: center;
+  cursor: help;
+  transition:
+    color 0.14s,
+    background 0.14s;
+}
+
+.tip-trigger:hover,
+.tip-trigger:focus-visible {
+  color: var(--gen-orange);
+  background: rgba(255, 69, 26, 0.1);
+  outline: none;
+}
+
+.tip-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(330px, 76vw);
+  background: var(--gen-navy);
+  color: var(--gen-white);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  text-align: left;
+  padding: 11px 13px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-raised);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s;
+  z-index: 50;
+}
+
+.tip:hover .tip-pop,
+.tip:focus-within .tip-pop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Bridges the gap so moving the pointer into the tooltip does not dismiss it. */
+.tip-pop::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
+
+.tip-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  margin-top: 9px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.14s,
+    border-color 0.14s;
+}
+
+.tip-copy:hover,
+.tip-copy:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+  outline: none;
+}
+
+.tip-copy-url {
+  flex: 1;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  line-height: 1.45;
+  word-break: break-all;
 }
 
 .nav {

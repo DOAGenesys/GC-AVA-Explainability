@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     'Explainability and observability for Genesys Cloud Agentic Virtual Agents: session outcomes, turn transcripts, and full execution traces with tool-level detail.',
   robots: { index: false, follow: false },
   // Served from /images/ so the middleware session gate does not intercept it.
-  icons: { icon: [{ url: '/images/brand/genesys-cloud-logomark.svg', type: 'image/svg+xml' }] },
+  icons: { icon: [{ url: '/images/brand/genesys-logomark.svg', type: 'image/svg+xml' }] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
