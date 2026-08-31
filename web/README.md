@@ -317,8 +317,9 @@ Users enter this client's id on the sign-in page; it is not configured as an env
 | Permission                            | Needed for                                    |
 | ------------------------------------- | --------------------------------------------- |
 | `architect:flow:view`                 | Listing flows and reading the AVA flag        |
-| `architect:flowExecution:view`        | Submitting and reading execution-history jobs |
-| `analytics:botFlowReportingTurn:view` | Bot flow sessions and reporting turns         |
+| `architect:flowInstance:view`         | Submitting and reading execution-history jobs |
+| `analytics:botFlowReportingTurn:view` | Reporting turns (the transcript)              |
+| `analytics:botFlowSession:view`       | Bot flow sessions, if your org lists it       |
 
 ## Setup
 

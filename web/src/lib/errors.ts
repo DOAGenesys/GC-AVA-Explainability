@@ -93,7 +93,7 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     retryable: false,
     message: 'Your Genesys user does not have permission for this operation.',
     nextAction:
-      'Ask an administrator for architect:flow:view, architect:flowExecution:view and analytics:botFlowReportingTurn:view.',
+      'Ask an administrator for architect:flow:view, architect:flowInstance:view and analytics:botFlowReportingTurn:view.',
     httpStatus: 403,
   },
   INGEST_NOT_AUTHORIZED: {
