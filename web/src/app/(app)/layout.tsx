@@ -13,11 +13,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="shell">
       <aside className="sidebar">
         <Link href="/" className="brand" style={{ color: 'inherit' }}>
-          <span className="brand-mark">g</span>
-          <span className="brand-text">
-            <strong>AVA Observability</strong>
-            <span>Genesys Cloud</span>
-          </span>
+          {/* White-wordmark logo, per brand rules for Navy backgrounds. Plain <img> for the same
+              reason as on the sign-in page: SVG needs no optimizer. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/brand/genesys-cloud-horizontal-white.svg"
+            alt="Genesys Cloud"
+            className="brand-logo"
+            width={158}
+            height={19}
+          />
+          <span className="brand-product">AVA Observability</span>
         </Link>
 
         <nav className="nav">

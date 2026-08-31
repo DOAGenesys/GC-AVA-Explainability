@@ -100,40 +100,35 @@ h3 {
 
 .brand {
   display: flex;
-  align-items: center;
-  gap: 11px;
-}
-
-/* The harmonized circle from the adaptive "g", used as the mark container. */
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--gen-orange);
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 17px;
-  color: var(--gen-white);
-  flex: 0 0 auto;
-}
-
-.brand-text {
-  display: flex;
   flex-direction: column;
-  line-height: 1.2;
+  align-items: flex-start;
+  gap: 10px;
+  text-decoration: none;
 }
 
-.brand-text strong {
-  font-size: 14px;
-  font-weight: 600;
+/*
+ * The official Genesys Cloud logo. Never recoloured, skewed or rebuilt: the variant is chosen per
+ * background (full colour on light, white wordmark on Navy) and only scaled. Width stays above the
+ * 90px brand minimum, and the product name sits on its own line so nothing is appended to the
+ * wordmark itself.
+ */
+.brand-logo {
+  display: block;
+  height: auto;
+  /* Brand clear space is the width of the logomark; this keeps the nav from crowding it. */
+  margin-bottom: 2px;
 }
 
-.brand-text span {
-  font-size: 11px;
+.brand-product {
+  font-size: 12px;
+  font-weight: 500;
   color: var(--gen-arctic);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
+}
+
+.login-card .brand-logo {
+  margin-bottom: 20px;
 }
 
 .nav {

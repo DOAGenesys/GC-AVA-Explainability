@@ -275,7 +275,14 @@ Other measures:
   validate `Authorization: Bearer $CRON_SECRET` in constant time. That secret is the only thing
   between the public internet and the org's entire Genesys API budget.
 - **CSP**: strict, nonce-based, applied in middleware to every response. Roboto is self-hosted via
-  `next/font`, so no external style or font origin is allowed.
+  `next/font`, so no external style or font origin is allowed. One deliberate exception: the
+  sign-in route widens `form-action` to the Genesys region domains, because that directive is
+  enforced against every hop of a submission and the sign-in form's own endpoint answers with a
+  redirect to the Genesys authorize URL. Every other route keeps `form-action 'self'`.
+- **Remembered sign-in details**: the region and previously used OAuth client ids are kept in
+  `localStorage` for convenience. Neither is a secret — a PKCE public client id travels in the
+  authorize URL by design — and tokens remain in the encrypted HttpOnly cookie, unreadable by
+  client code.
 - **Logging**: structured JSON with token-shaped strings, bearer headers and signed download URIs
   redacted before emission.
 

@@ -23,7 +23,25 @@ const PUBLIC_PATHS = new Set<string>([
   '/api/health',
 ]);
 
-function buildCsp(nonce: string, isProd: boolean): string {
+/**
+ * Genesys login origins, needed in `form-action` on the sign-in page only.
+ *
+ * `form-action` is enforced against every hop of a submission, not just its first target. The
+ * sign-in form posts to our own `/api/auth/login`, which answers with a redirect to the Genesys
+ * authorize endpoint, and `form-action 'self'` blocks that redirect. The region is user-supplied,
+ * so the exact host is not known when this header is built; CSP only permits a wildcard in the
+ * leftmost label, hence one entry per Genesys region domain rather than `login.<region>`.
+ */
+const GENESYS_LOGIN_ORIGINS = [
+  'https://*.pure.cloud',
+  'https://*.mypurecloud.com',
+  'https://*.mypurecloud.de',
+  'https://*.mypurecloud.ie',
+  'https://*.mypurecloud.com.au',
+  'https://*.mypurecloud.jp',
+];
+
+function buildCsp(nonce: string, isProd: boolean, isSignIn: boolean): string {
   const scriptSrc = [`'self'`, `'nonce-${nonce}'`, `'strict-dynamic'`];
   if (!isProd) scriptSrc.push(`'unsafe-eval'`); // React Fast Refresh in dev only.
 
@@ -39,7 +57,7 @@ function buildCsp(nonce: string, isProd: boolean): string {
     'worker-src': [`'self'`, 'blob:'],
     'object-src': [`'none'`],
     'base-uri': [`'self'`],
-    'form-action': [`'self'`],
+    'form-action': isSignIn ? [`'self'`, ...GENESYS_LOGIN_ORIGINS] : [`'self'`],
     'frame-ancestors': [`'none'`],
   };
   let csp = Object.entries(directives)
@@ -56,8 +74,9 @@ function isPublic(pathname: string): boolean {
 export async function middleware(req: NextRequest): Promise<NextResponse> {
   const isProd = process.env.NODE_ENV === 'production';
   const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
-  const csp = buildCsp(nonce, isProd);
   const { pathname, search } = req.nextUrl;
+  const isSignIn = pathname === '/login' || pathname === '/api/auth/login';
+  const csp = buildCsp(nonce, isProd, isSignIn);
 
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set('x-nonce', nonce);

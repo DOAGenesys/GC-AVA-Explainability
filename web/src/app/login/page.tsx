@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { LoginForm } from '@/components/login-form';
 
 export const metadata: Metadata = { title: 'Sign in | AVA Observability' };
 
@@ -26,18 +27,24 @@ export default async function LoginPage({
   return (
     <main className="login-wrap">
       <div className="login-card">
-        <div className="brand" style={{ marginBottom: 22 }}>
-          <span className="brand-mark">g</span>
-          <span className="brand-text">
-            <strong style={{ color: 'var(--ink)' }}>AVA Observability</strong>
-            <span style={{ color: 'var(--ink-faint)' }}>Genesys Cloud</span>
-          </span>
-        </div>
+        {/*
+          Full-colour logo, per brand rules for light backgrounds. A plain <img> is deliberate:
+          next/image cannot serve SVG without `dangerouslyAllowSVG`, which would let arbitrary SVG
+          through the optimizer, and there is nothing to optimise in a vector logo.
+        */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/brand/genesys-cloud-horizontal.svg"
+          alt="Genesys Cloud"
+          className="brand-logo"
+          width={168}
+          height={20}
+        />
 
-        <h1>Sign in with Genesys Cloud</h1>
+        <h1>AVA Observability</h1>
         <p>
-          Authorization Code with PKCE. Your tokens are held only in an encrypted, HttpOnly cookie
-          for this browser and are never written to storage.
+          Sign in with Genesys Cloud using Authorization Code with PKCE. Your tokens are held only
+          in an encrypted, HttpOnly cookie for this browser and are never written to storage.
         </p>
 
         {error ? (
@@ -46,44 +53,7 @@ export default async function LoginPage({
           </div>
         ) : null}
 
-        <form method="GET" action="/api/auth/login">
-          {params.next ? <input type="hidden" name="next" value={params.next} /> : null}
-
-          <div className="field">
-            <label htmlFor="region">Genesys region</label>
-            <input
-              id="region"
-              name="region"
-              required
-              placeholder="mypurecloud.de"
-              autoComplete="off"
-              spellCheck={false}
-              defaultValue="mypurecloud.de"
-            />
-            <p className="field-hint">
-              The region domain, for example mypurecloud.de or mypurecloud.com.
-            </p>
-          </div>
-
-          <div className="field">
-            <label htmlFor="clientId">OAuth Client ID</label>
-            <input
-              id="clientId"
-              name="clientId"
-              required
-              placeholder="00000000-0000-0000-0000-000000000000"
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <p className="field-hint">
-              A Code Authorization client whose redirect URI is this app&apos;s /api/auth/callback.
-            </p>
-          </div>
-
-          <button className="btn-primary" type="submit">
-            Continue to Genesys
-          </button>
-        </form>
+        <LoginForm next={params.next} />
       </div>
     </main>
   );
