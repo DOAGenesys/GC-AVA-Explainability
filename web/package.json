@@ -5,7 +5,7 @@
   "description": "AVA explainability and observability dashboards for Genesys Cloud, ingesting on Vercel cron with a measured API budget.",
   "type": "module",
   "engines": {
-    "node": ">=20.11.0"
+    "node": "22.x || 24.x"
   },
   "scripts": {
     "dev": "next dev",
@@ -22,22 +22,22 @@
   },
   "dependencies": {
     "@vercel/postgres": "^0.10.0",
-    "next": "^15.1.6",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "next": "^16.3.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "recharts": "^2.15.0",
     "server-only": "^0.0.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",
-    "@types/react": "^19.0.7",
-    "@types/react-dom": "^19.0.3",
-    "eslint": "^9.18.0",
-    "eslint-config-next": "^15.1.6",
-    "eslint-config-prettier": "^9.1.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.3",
+    "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.4.2",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.11"
   }
 }

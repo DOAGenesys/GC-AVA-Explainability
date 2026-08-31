@@ -15,7 +15,11 @@ export const dynamic = 'force-dynamic';
 export default async function BudgetPage() {
   const runs = await listIngestRuns(120);
 
-  const last24h = runs.filter((r) => Date.now() - Date.parse(r.startedAt) < 86_400_000);
+  // react-hooks/purity cannot yet tell a Server Component from a client one. This renders once per
+  // request on the server, so there is no re-render for an unstable clock read to destabilise.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
+  const last24h = runs.filter((r) => now - Date.parse(r.startedAt) < 86_400_000);
   const calls24h = last24h.reduce((sum, r) => sum + r.apiCalls, 0);
   const retrieved24h = last24h.reduce((sum, r) => sum + r.executionsRetrieved, 0);
   const rateLimited24h = last24h.reduce((sum, r) => sum + r.rateLimited, 0);

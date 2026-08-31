@@ -409,6 +409,12 @@ test/                 unit tests over the pure security and parsing logic
 scripts/init-db.mjs   applies the schema
 ```
 
+Next.js 16 deprecates `middleware.ts` in favour of `proxy.ts` and prints a codemod suggestion on
+every build. That rename is deliberately **not** applied here: `proxy` runs on the Node runtime and
+cannot be configured otherwise, whereas this file is written to be dependency-light and
+`server-only`-free precisely so the session gate runs at the edge, before a request reaches a
+function. Taking the codemod would move an auth check off the edge to silence a warning.
+
 ## Checks
 
 ```bash
