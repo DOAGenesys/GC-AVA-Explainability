@@ -2,88 +2,99 @@ import { describe, expect, it } from 'vitest';
 import {
   buildNotificationTopics,
   eventHighlights,
+  extractExecutionPointer,
   normalizeNotification,
-  notificationLabel,
+  parseFlowIds,
 } from '@/lib/notification-events';
 
 const FLOW_ID = '56155fa0-92cd-574b-b7cf-0fafad91fd2f';
-const CONVERSATION_ID = '7a4d8e6d-53de-5891-a916-78f31c24729d';
+const SECOND_FLOW_ID = '85fda89f-b22d-56df-90ae-9d49722751a0';
+const EXECUTION_ID = '5c1550fd-dbb7-5da1-b337-25b42af123d7';
+const CONVERSATION_ID = '33b6e980-095b-51a7-ae3e-02be439ac4bc';
 
-describe('buildNotificationTopics', () => {
-  it('replaces every placeholder with the correct concrete id', () => {
-    expect(
-      buildNotificationTopics({
-        selected: ['conversation-flow-end', 'flow-instance', 'flow-change'],
-        flowId: FLOW_ID,
-        conversationId: CONVERSATION_ID,
-      }),
-    ).toEqual({
-      topics: [
-        `v2.detail.events.conversation.${CONVERSATION_ID}.flow.end`,
-        `v2.flows.instances.flow.${FLOW_ID}`,
-        `v2.flows.${FLOW_ID}`,
-      ],
+describe('flow-instance topics', () => {
+  it('builds one concrete subscription per unique flow', () => {
+    expect(buildNotificationTopics({ flowIds: [FLOW_ID, SECOND_FLOW_ID, FLOW_ID] })).toEqual({
+      flowIds: [FLOW_ID, SECOND_FLOW_ID],
+      topics: [`v2.flows.instances.flow.${FLOW_ID}`, `v2.flows.instances.flow.${SECOND_FLOW_ID}`],
       errors: [],
     });
   });
 
-  it('requires only the identifier needed by the selected topic', () => {
-    expect(
-      buildNotificationTopics({
-        selected: ['flow-instance'],
-        flowId: FLOW_ID,
-      }),
-    ).toEqual({
-      topics: [`v2.flows.instances.flow.${FLOW_ID}`],
-      errors: [],
-    });
+  it('accepts comma, whitespace and newline separated flow lists', () => {
+    expect(parseFlowIds(`${FLOW_ID},\n${SECOND_FLOW_ID} ${FLOW_ID}`)).toEqual([
+      FLOW_ID,
+      SECOND_FLOW_ID,
+    ]);
   });
 
-  it('rejects empty selections and malformed identifiers', () => {
-    expect(buildNotificationTopics({ selected: [] }).errors).toContain(
-      'Select at least one topic.',
-    );
-    expect(
-      buildNotificationTopics({
-        selected: ['conversation-flow-end'],
-        conversationId: '*',
-      }).errors,
-    ).toContain('Enter a valid conversation ID for the selected conversation topic.');
+  it('rejects an empty or malformed flow list', () => {
+    expect(buildNotificationTopics({ flowIds: [] }).errors).toContain('Add at least one flow.');
+    expect(buildNotificationTopics({ flowIds: ['*'] }).errors[0]).toContain('not valid UUIDs');
   });
 });
 
-describe('notification payload helpers', () => {
-  it('unwraps a direct WebSocket envelope', () => {
-    const raw = {
-      topicName: `v2.flows.instances.flow.${FLOW_ID}`,
-      eventBody: { executionId: 'exec-1', flowId: FLOW_ID },
-      metadata: { CorrelationId: 'abc' },
-    };
+describe('flow-instance payload helpers', () => {
+  const body = {
+    executionId: EXECUTION_ID,
+    conversationId: CONVERSATION_ID,
+    flowId: FLOW_ID,
+    flowVersion: '4.0',
+    flowExitReason: 'DISCONNECT',
+    executionItemsTruncated: false,
+  };
 
-    expect(normalizeNotification(raw)).toMatchObject({
-      topicName: raw.topicName,
-      body: raw.eventBody,
-      raw,
+  it('extracts the zero-discovery pointer from a real event shape', () => {
+    expect(extractExecutionPointer(body)).toEqual({
+      executionId: EXECUTION_ID,
+      flowId: FLOW_ID,
+      conversationId: CONVERSATION_ID,
     });
   });
 
-  it('also unwraps an EventBridge detail envelope', () => {
-    const raw = {
-      detail: {
-        topicName: `v2.flows.${FLOW_ID}`,
-        eventBody: {
-          id: FLOW_ID,
-          currentOperation: { actionName: 'PUBLISH', actionStatus: 'SUCCESS' },
-        },
-      },
-    };
-    const normalized = normalizeNotification(raw);
+  it('rejects an incomplete or malformed pointer before it can spend Jobs budget', () => {
+    expect(extractExecutionPointer({ ...body, executionId: undefined })).toBeNull();
+    expect(extractExecutionPointer({ ...body, flowId: '*' })).toBeNull();
+  });
 
-    expect(notificationLabel(normalized.topicName)).toBe('Flow configuration changed');
-    expect(eventHighlights(normalized.body)).toEqual([
-      { key: 'id', value: FLOW_ID },
-      { key: 'actionName', value: 'PUBLISH' },
-      { key: 'actionStatus', value: 'SUCCESS' },
+  it('accepts the identifiers from a nested execution object', () => {
+    expect(
+      extractExecutionPointer({
+        execution: {
+          id: EXECUTION_ID,
+          flow: { id: FLOW_ID },
+          conversation: { id: CONVERSATION_ID },
+        },
+      }),
+    ).toEqual({
+      executionId: EXECUTION_ID,
+      flowId: FLOW_ID,
+      conversationId: CONVERSATION_ID,
+    });
+  });
+
+  it('unwraps direct WebSocket and EventBridge envelopes', () => {
+    const websocket = {
+      topicName: `v2.flows.instances.flow.${FLOW_ID}`,
+      eventBody: body,
+      metadata: { CorrelationId: 'abc' },
+    };
+    expect(normalizeNotification(websocket)).toMatchObject({
+      topicName: websocket.topicName,
+      body,
+      raw: websocket,
+    });
+    expect(normalizeNotification({ detail: websocket }).body).toEqual(body);
+  });
+
+  it('exposes the identifiers and outcomes as copyable highlights', () => {
+    expect(eventHighlights(body)).toEqual([
+      { key: 'executionId', value: EXECUTION_ID },
+      { key: 'conversationId', value: CONVERSATION_ID },
+      { key: 'flowId', value: FLOW_ID },
+      { key: 'flowVersion', value: '4.0' },
+      { key: 'flowExitReason', value: 'DISCONNECT' },
+      { key: 'executionItemsTruncated', value: 'false' },
     ]);
   });
 });

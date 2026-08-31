@@ -2,7 +2,7 @@ import 'server-only';
 
 import { sql } from '@vercel/postgres';
 import { AppError } from '@/lib/errors';
-import type { AvaFlow, BotFlowSession, ParsedTrace, ReportingTurn } from '../genesys/ava';
+import type { ParsedTrace } from '../genesys/ava';
 
 /**
  * Postgres access. Plain parameterised SQL rather than an ORM: the interesting queries here are
@@ -70,39 +70,6 @@ function nullableTimestamp(value: string | null | undefined): string | null {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
-// --------------------------------------------------------------------------- writes
-
-export async function upsertFlows(flows: AvaFlow[]): Promise<void> {
-  for (const flow of flows) {
-    // ava_enabled_changed_at is only touched when the value actually moves, which turns the
-    // registry into a drift log rather than just a snapshot.
-    await sql`
-      INSERT INTO ava_flows (flow_id, name, flow_type, division_id, ava_enabled, published_version)
-      VALUES (${flow.flowId}, ${flow.name}, ${flow.flowType}, ${flow.divisionId},
-              ${flow.avaEnabled}, ${flow.publishedVersion})
-      ON CONFLICT (flow_id) DO UPDATE SET
-        name = EXCLUDED.name,
-        flow_type = EXCLUDED.flow_type,
-        division_id = EXCLUDED.division_id,
-        published_version = EXCLUDED.published_version,
-        last_seen_at = now(),
-        ava_enabled_changed_at = CASE
-          WHEN ava_flows.ava_enabled IS DISTINCT FROM EXCLUDED.ava_enabled THEN now()
-          ELSE ava_flows.ava_enabled_changed_at
-        END,
-        ava_enabled = EXCLUDED.ava_enabled
-    `;
-  }
-}
-
-export async function listIngestableFlowIds(explicit: string[]): Promise<string[]> {
-  if (explicit.length > 0) return explicit;
-  const { rows } = await sql<{ flow_id: string }>`
-    SELECT flow_id FROM ava_flows WHERE ava_enabled ORDER BY last_seen_at DESC
-  `;
-  return rows.map((r) => r.flow_id);
-}
-
 export interface AvaFlowOption {
   flowId: string;
   name: string;
@@ -112,9 +79,22 @@ export interface AvaFlowOption {
 /** Known AVA flows offered as suggestions without preventing a user from pasting any flow id. */
 export async function listAvaFlowOptions(): Promise<AvaFlowOption[]> {
   const { rows } = await sql<{ flow_id: string; name: string; flow_type: string | null }>`
+    WITH candidates AS (
+      SELECT flow_id, name, flow_type, 0 AS priority
+      FROM ava_flows
+      WHERE ava_enabled
+      UNION ALL
+      SELECT flow_id, coalesce(flow_name, 'Captured flow') AS name, NULL AS flow_type, 1 AS priority
+      FROM ava_executions
+      WHERE flow_id IS NOT NULL
+    ),
+    known AS (
+      SELECT DISTINCT ON (flow_id) flow_id, name, flow_type
+      FROM candidates
+      ORDER BY flow_id, priority
+    )
     SELECT flow_id, name, flow_type
-    FROM ava_flows
-    WHERE ava_enabled
+    FROM known
     ORDER BY name, flow_id
   `;
   return rows.map((row) => ({
@@ -122,88 +102,6 @@ export async function listAvaFlowOptions(): Promise<AvaFlowOption[]> {
     name: row.name,
     flowType: row.flow_type,
   }));
-}
-
-export async function upsertSessions(sessions: BotFlowSession[]): Promise<void> {
-  for (const s of sessions) {
-    await sql`
-      INSERT INTO ava_sessions (session_id, flow_id, conversation_id, channel_name, language,
-                                end_language, bot_result, bot_result_category, date_created,
-                                date_completed)
-      VALUES (${s.sessionId}, ${s.flowId}, ${s.conversationId}, ${s.channelName}, ${s.language},
-              ${s.endLanguage}, ${s.botResult}, ${s.botResultCategory},
-              ${nullableTimestamp(s.dateCreated)}, ${nullableTimestamp(s.dateCompleted)})
-      ON CONFLICT (session_id) DO UPDATE SET
-        bot_result = EXCLUDED.bot_result,
-        bot_result_category = EXCLUDED.bot_result_category,
-        end_language = EXCLUDED.end_language,
-        date_completed = EXCLUDED.date_completed,
-        ingested_at = now()
-    `;
-  }
-}
-
-export async function upsertTurns(turns: ReportingTurn[]): Promise<void> {
-  for (const t of turns) {
-    await sql`
-      INSERT INTO ava_turns (turn_id, session_id, flow_id, conversation_id, sequence_number,
-                             ask_action, ask_action_result, user_input, bot_prompts, turn_start,
-                             turn_end, raw)
-      VALUES (${t.turnId}, ${t.sessionId}, ${t.flowId}, ${t.conversationId}, ${t.sequence},
-              ${t.askAction}, ${t.askActionResult}, ${JSON.stringify(t.userInput)},
-              ${JSON.stringify(t.botPrompts)}, ${nullableTimestamp(t.turnStart)},
-              ${nullableTimestamp(t.turnEnd)}, ${JSON.stringify(t.raw)})
-      -- Every derived column is refreshed, not just the ones that change upstream. Two mapping bugs
-      -- have already shipped here, and an update list that skipped columns meant a corrected mapping
-      -- only ever applied to turns arriving for the first time, leaving existing rows wrong forever.
-      ON CONFLICT (turn_id) DO UPDATE SET
-        session_id = EXCLUDED.session_id,
-        conversation_id = EXCLUDED.conversation_id,
-        sequence_number = EXCLUDED.sequence_number,
-        ask_action = EXCLUDED.ask_action,
-        ask_action_result = EXCLUDED.ask_action_result,
-        user_input = EXCLUDED.user_input,
-        bot_prompts = EXCLUDED.bot_prompts,
-        turn_start = EXCLUDED.turn_start,
-        turn_end = EXCLUDED.turn_end,
-        raw = EXCLUDED.raw,
-        ingested_at = now()
-    `;
-  }
-}
-
-/**
- * Drop content-hash turn rows that a natural key has since replaced.
- *
- * Turns archived before their sequence field was recognised were keyed by hashing their content.
- * Once the natural key works, the same turn arrives under a different primary key, so re-ingestion
- * would leave the transcript showing every turn twice rather than correcting it.
- *
- * The count guard is what keeps this from destroying data: hashed rows are only removed for a
- * session where natural keys account for at least as many turns, so a session that genuinely mixes
- * both shapes keeps a visible duplicate instead of quietly losing a turn.
- *
- * Deliberately unscoped. Superseded rows belong to whatever window was current when they were
- * written, which is not the window being ingested now, so restricting this to the current batch
- * would leave the older duplicates in place forever.
- */
-export async function pruneSupersededTurnKeys(): Promise<number> {
-  const { rowCount } = await sql`
-    WITH tally AS (
-      SELECT session_id,
-             count(*) FILTER (WHERE turn_id LIKE 'sha256:%')     AS hashed,
-             count(*) FILTER (WHERE turn_id NOT LIKE 'sha256:%') AS natural_keys
-      FROM ava_turns
-      WHERE session_id IS NOT NULL
-      GROUP BY session_id
-    )
-    DELETE FROM ava_turns t
-    USING tally
-    WHERE t.session_id = tally.session_id
-      AND t.turn_id LIKE 'sha256:%'
-      AND tally.natural_keys >= tally.hashed
-  `;
-  return rowCount ?? 0;
 }
 
 export interface ExecutionRecord {
@@ -249,15 +147,27 @@ export async function upsertExecution(record: ExecutionRecord): Promise<void> {
       ${record.retrievalStatus === 'ARCHIVED' ? new Date().toISOString() : null}
     )
     ON CONFLICT (execution_id) DO UPDATE SET
-      retrieval_status = EXCLUDED.retrieval_status,
+      retrieval_status = CASE
+        WHEN ava_executions.retrieval_status IN ('ARCHIVED', 'NO_HISTORY')
+          THEN ava_executions.retrieval_status
+        ELSE EXCLUDED.retrieval_status
+      END,
       jobs_status_code = EXCLUDED.jobs_status_code,
       -- A retry that finally succeeds must not lose the count of what it took to get there.
       retrieval_attempts = ava_executions.retrieval_attempts + 1,
       api_calls_per_execution = EXCLUDED.api_calls_per_execution,
       -- Never overwrite a good trace with a null from a later failed attempt.
       trace = COALESCE(EXCLUDED.trace, ava_executions.trace),
+      flow_id = COALESCE(EXCLUDED.flow_id, ava_executions.flow_id),
       flow_name = COALESCE(EXCLUDED.flow_name, ava_executions.flow_name),
+      flow_version = COALESCE(EXCLUDED.flow_version, ava_executions.flow_version),
+      conversation_id = COALESCE(EXCLUDED.conversation_id, ava_executions.conversation_id),
+      session_id = COALESCE(EXCLUDED.session_id, ava_executions.session_id),
+      start_date_time = COALESCE(EXCLUDED.start_date_time, ava_executions.start_date_time),
+      end_date_time = COALESCE(EXCLUDED.end_date_time, ava_executions.end_date_time),
       duration_ms = COALESCE(EXCLUDED.duration_ms, ava_executions.duration_ms),
+      error_count = GREATEST(EXCLUDED.error_count, ava_executions.error_count),
+      warning_count = GREATEST(EXCLUDED.warning_count, ava_executions.warning_count),
       tool_call_count = GREATEST(EXCLUDED.tool_call_count, ava_executions.tool_call_count),
       item_count = GREATEST(EXCLUDED.item_count, ava_executions.item_count),
       truncated = EXCLUDED.truncated OR ava_executions.truncated,
@@ -302,6 +212,57 @@ export async function upsertExecution(record: ExecutionRecord): Promise<void> {
   `;
 }
 
+/**
+ * Atomically claim execution IDs before spending Jobs budget.
+ *
+ * The status doubles as a five-minute lease. Concurrent tabs cannot both move the same row into
+ * FETCHING, while a serverless interruption can recover after the lease expires.
+ */
+export async function claimExecutions(
+  records: Pick<ExecutionRecord, 'executionId' | 'flowId' | 'conversationId'>[],
+): Promise<Set<string>> {
+  const claimed = new Set<string>();
+  await Promise.all(
+    records.map(async (record) => {
+      const inserted = await sql<{ execution_id: string }>`
+        INSERT INTO ava_executions (
+          execution_id, flow_id, conversation_id, retrieval_status, retrieval_attempts,
+          retrieved_at
+        )
+        VALUES (
+          ${record.executionId}, ${record.flowId}, ${record.conversationId}, 'FETCHING', 0,
+          now()
+        )
+        ON CONFLICT (execution_id) DO NOTHING
+        RETURNING execution_id
+      `;
+      if (inserted.rows[0]) {
+        claimed.add(inserted.rows[0].execution_id);
+        return;
+      }
+
+      const retried = await sql<{ execution_id: string }>`
+        UPDATE ava_executions
+        SET retrieval_status = 'FETCHING',
+            retrieved_at = now(),
+            flow_id = COALESCE(flow_id, ${record.flowId}),
+            conversation_id = COALESCE(conversation_id, ${record.conversationId})
+        WHERE execution_id = ${record.executionId}
+          AND (
+            retrieval_status IN ('DOWNLOAD_FAILED', 'PENDING')
+            OR (
+              retrieval_status = 'FETCHING'
+              AND retrieved_at < now() - interval '5 minutes'
+            )
+          )
+        RETURNING execution_id
+      `;
+      if (retried.rows[0]) claimed.add(retried.rows[0].execution_id);
+    }),
+  );
+  return claimed;
+}
+
 /** Attach discovered execution ids to their session, so coverage can be computed per session. */
 export async function linkExecutionToSession(
   conversationId: string,
@@ -317,15 +278,12 @@ export async function linkExecutionToSession(
   `;
 }
 
-export interface IngestRunRecord {
+export interface CaptureRunRecord {
   kind: string;
   startedAt: Date;
   ok: boolean;
   apiCalls: number;
   rateLimited: number;
-  flowsScanned?: number;
-  sessionsSeen?: number;
-  turnsSeen?: number;
   executionsDiscovered?: number;
   executionsRetrieved?: number;
   executionsNoHistory?: number;
@@ -334,7 +292,7 @@ export interface IngestRunRecord {
   detail?: unknown;
 }
 
-export async function recordIngestRun(run: IngestRunRecord): Promise<void> {
+export async function recordCaptureRun(run: CaptureRunRecord): Promise<void> {
   const finishedAt = new Date();
   await sql`
     INSERT INTO ingest_runs (kind, started_at, finished_at, duration_ms, ok, api_calls,
@@ -342,8 +300,8 @@ export async function recordIngestRun(run: IngestRunRecord): Promise<void> {
       executions_retrieved, executions_no_history, api_calls_per_execution, error, detail)
     VALUES (${run.kind}, ${run.startedAt.toISOString()}, ${finishedAt.toISOString()},
       ${finishedAt.getTime() - run.startedAt.getTime()}, ${run.ok}, ${run.apiCalls},
-      ${run.rateLimited}, ${run.flowsScanned ?? 0}, ${run.sessionsSeen ?? 0},
-      ${run.turnsSeen ?? 0}, ${run.executionsDiscovered ?? 0}, ${run.executionsRetrieved ?? 0},
+      ${run.rateLimited}, 0, 0, 0, ${run.executionsDiscovered ?? 0},
+      ${run.executionsRetrieved ?? 0},
       ${run.executionsNoHistory ?? 0}, ${run.apiCallsPerExecution ?? null},
       ${run.error ?? null}, ${run.detail ? JSON.stringify(run.detail) : null})
   `;
@@ -381,6 +339,11 @@ export async function getOverviewMetrics(days: number): Promise<OverviewMetrics>
   }>`
     WITH window_sessions AS (
       SELECT * FROM ava_sessions WHERE date_created > now() - (${days} || ' days')::interval
+    ),
+    capture_execution_ids AS (
+      SELECT DISTINCT jsonb_array_elements_text(detail->'executionIds') AS execution_id
+      FROM ingest_runs
+      WHERE kind = 'capture' AND jsonb_typeof(detail->'executionIds') = 'array'
     )
     SELECT
       (SELECT count(*) FROM window_sessions) AS sessions,
@@ -388,20 +351,34 @@ export async function getOverviewMetrics(days: number): Promise<OverviewMetrics>
       (SELECT count(*) FROM ava_turns WHERE turn_start > now() - (${days} || ' days')::interval) AS turns,
       (SELECT count(*) FROM ava_executions
         WHERE retrieval_status = 'ARCHIVED'
+          AND execution_id IN (SELECT execution_id FROM capture_execution_ids)
           AND first_seen_at > now() - (${days} || ' days')::interval) AS archived,
       (SELECT count(*) FROM ava_executions
         WHERE retrieval_status = 'NO_HISTORY'
+          AND execution_id IN (SELECT execution_id FROM capture_execution_ids)
           AND first_seen_at > now() - (${days} || ' days')::interval) AS no_history,
       (SELECT count(*) FROM ava_tool_calls
-        WHERE occurred_at > now() - (${days} || ' days')::interval) AS tool_calls,
+        WHERE occurred_at > now() - (${days} || ' days')::interval
+          AND EXISTS (
+            SELECT 1 FROM ava_executions e
+            WHERE e.execution_id = ava_tool_calls.execution_id
+              AND e.execution_id IN (SELECT execution_id FROM capture_execution_ids)
+          )) AS tool_calls,
       (SELECT count(*) FROM ava_tool_calls
-        WHERE NOT succeeded AND occurred_at > now() - (${days} || ' days')::interval) AS tool_failures,
+        WHERE NOT succeeded AND occurred_at > now() - (${days} || ' days')::interval
+          AND EXISTS (
+            SELECT 1 FROM ava_executions e
+            WHERE e.execution_id = ava_tool_calls.execution_id
+              AND e.execution_id IN (SELECT execution_id FROM capture_execution_ids)
+          )) AS tool_failures,
       (SELECT count(*) FROM ava_executions
-        WHERE truncated AND first_seen_at > now() - (${days} || ' days')::interval) AS truncated,
+        WHERE truncated
+          AND execution_id IN (SELECT execution_id FROM capture_execution_ids)
+          AND first_seen_at > now() - (${days} || ' days')::interval) AS truncated,
       (SELECT coalesce(sum(api_calls), 0) FROM ingest_runs
-        WHERE started_at > now() - interval '24 hours') AS api_calls,
+        WHERE kind = 'capture' AND started_at > now() - interval '24 hours') AS api_calls,
       (SELECT round(avg(api_calls_per_execution), 3) FROM ingest_runs
-        WHERE api_calls_per_execution IS NOT NULL
+        WHERE kind = 'capture' AND api_calls_per_execution IS NOT NULL
           AND started_at > now() - (${days} || ' days')::interval) AS calls_per_execution,
       (SELECT count(*) FROM window_sessions
         WHERE bot_result_category IN ('Containment', 'Contained')) AS contained
@@ -455,13 +432,23 @@ export async function getToolStats(days: number): Promise<ToolStat[]> {
     p50: string | null;
     p95: string | null;
   }>`
+    WITH capture_execution_ids AS (
+      SELECT DISTINCT jsonb_array_elements_text(detail->'executionIds') AS execution_id
+      FROM ingest_runs
+      WHERE kind = 'capture' AND jsonb_typeof(detail->'executionIds') = 'array'
+    )
     SELECT tool_name,
            count(*) AS calls,
            count(*) FILTER (WHERE NOT succeeded) AS failures,
            percentile_disc(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50,
            percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95
-    FROM ava_tool_calls
+    FROM ava_tool_calls t
     WHERE occurred_at > now() - (${days} || ' days')::interval
+      AND EXISTS (
+        SELECT 1 FROM ava_executions e
+        WHERE e.execution_id = t.execution_id
+          AND e.execution_id IN (SELECT execution_id FROM capture_execution_ids)
+      )
     GROUP BY 1
     ORDER BY calls DESC
     LIMIT 50
@@ -612,7 +599,70 @@ export async function getCoverageReport(days: number): Promise<CoverageReport> {
   };
 }
 
-export interface IngestRunRow {
+export interface CaptureCoverageReport {
+  observed: number;
+  archived: number;
+  noHistory: number;
+  failed: number;
+  truncated: number;
+  byFlow: {
+    flowId: string;
+    flowName: string | null;
+    observed: number;
+    archived: number;
+    noHistory: number;
+    failed: number;
+  }[];
+}
+
+/** Retrieval outcomes for executions actually observed by live capture; no unseen denominator. */
+export async function getCaptureCoverage(days: number): Promise<CaptureCoverageReport> {
+  const { rows } = await sql<{
+    flow_id: string | null;
+    flow_name: string | null;
+    observed: string;
+    archived: string;
+    no_history: string;
+    failed: string;
+    truncated: string;
+  }>`
+    WITH capture_execution_ids AS (
+      SELECT DISTINCT jsonb_array_elements_text(detail->'executionIds') AS execution_id
+      FROM ingest_runs
+      WHERE kind = 'capture' AND jsonb_typeof(detail->'executionIds') = 'array'
+    )
+    SELECT flow_id, max(flow_name) AS flow_name, count(*) AS observed,
+           count(*) FILTER (WHERE retrieval_status = 'ARCHIVED') AS archived,
+           count(*) FILTER (WHERE retrieval_status = 'NO_HISTORY') AS no_history,
+           count(*) FILTER (WHERE retrieval_status = 'DOWNLOAD_FAILED') AS failed,
+           count(*) FILTER (WHERE truncated) AS truncated
+    FROM ava_executions
+    WHERE first_seen_at > now() - (${days} || ' days')::interval
+      AND execution_id IN (SELECT execution_id FROM capture_execution_ids)
+    GROUP BY flow_id
+    ORDER BY count(*) DESC, flow_id
+  `;
+
+  const byFlow = rows.map((row) => ({
+    flowId: row.flow_id ?? 'unknown',
+    flowName: row.flow_name,
+    observed: Number(row.observed),
+    archived: Number(row.archived),
+    noHistory: Number(row.no_history),
+    failed: Number(row.failed),
+  }));
+
+  return {
+    observed: byFlow.reduce((sum, row) => sum + row.observed, 0),
+    archived: byFlow.reduce((sum, row) => sum + row.archived, 0),
+    noHistory: byFlow.reduce((sum, row) => sum + row.noHistory, 0),
+    failed: byFlow.reduce((sum, row) => sum + row.failed, 0),
+    truncated: rows.reduce((sum, row) => sum + Number(row.truncated), 0),
+    byFlow,
+  };
+}
+
+export interface CaptureRunRow {
   id: number;
   kind: string;
   startedAt: string;
@@ -626,7 +676,7 @@ export interface IngestRunRow {
   error: string | null;
 }
 
-export async function listIngestRuns(limit: number): Promise<IngestRunRow[]> {
+export async function listCaptureRuns(limit: number): Promise<CaptureRunRow[]> {
   const { rows } = await sql<{
     id: number;
     kind: string;
@@ -642,7 +692,10 @@ export async function listIngestRuns(limit: number): Promise<IngestRunRow[]> {
   }>`
     SELECT id, kind, started_at, duration_ms, ok, api_calls, rate_limited, executions_retrieved,
            executions_no_history, api_calls_per_execution, error
-    FROM ingest_runs ORDER BY started_at DESC LIMIT ${limit}
+    FROM ingest_runs
+    WHERE kind = 'capture'
+    ORDER BY started_at DESC
+    LIMIT ${limit}
   `;
   return rows.map((r) => ({
     id: r.id,

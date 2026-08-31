@@ -60,8 +60,8 @@ export default async function ToolsPage() {
         {tools.length === 0 ? (
           <Card>
             <Empty title="No tool calls recorded yet">
-              Tool detail lives only inside execution history, so it appears once the fidelity pass
-              retrieves an execution that reached its flow&apos;s exit.
+              Tool detail appears after Live capture receives a completed flow event and archives
+              its execution history.
             </Empty>
           </Card>
         ) : (

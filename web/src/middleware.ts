@@ -6,11 +6,7 @@ import { verifySession } from '@/server/auth/session-core';
 /**
  * Edge middleware enforcing a strict, nonce-based Content-Security-Policy on every response and
  * the signed app-session access gate. No page or API route is reachable without a valid session,
- * except the login flow, the liveness probe, and the cron routes.
- *
- * Cron routes are excluded here rather than left unauthenticated: they are called by Vercel Cron,
- * which sends a bearer secret and no cookie, so a session check would reject every legitimate
- * invocation. Each cron route validates that secret itself before doing any work.
+ * except the login flow and liveness probe.
  *
  * Kept dependency-light and `server-only`-free so it runs in the edge runtime.
  */
@@ -82,7 +78,7 @@ function buildCsp(nonce: string, isProd: boolean, isSignIn: boolean): string {
 }
 
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PATHS.has(pathname) || pathname.startsWith('/api/cron/');
+  return PUBLIC_PATHS.has(pathname);
 }
 
 export async function middleware(req: NextRequest): Promise<NextResponse> {

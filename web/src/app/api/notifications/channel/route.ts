@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { AppError, toAppError } from '@/lib/errors';
-import {
-  buildNotificationTopics,
-  isNotificationTopicKey,
-  type NotificationTopicKey,
-} from '@/lib/notification-events';
+import { buildNotificationTopics } from '@/lib/notification-events';
 import { requireAuth, requireCsrf } from '@/server/auth/guards';
 import { createNotificationChannel } from '@/server/genesys/notifications';
 import { logger } from '@/server/logger';
@@ -14,9 +10,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 interface StartRequest {
-  selected?: unknown;
-  flowId?: unknown;
-  conversationId?: unknown;
+  flowIds?: unknown;
 }
 
 /**
@@ -31,13 +25,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     requireCsrf(req);
 
     const body = (await req.json().catch(() => null)) as StartRequest | null;
-    const selected: NotificationTopicKey[] = Array.isArray(body?.selected)
-      ? body.selected.filter(isNotificationTopicKey)
-      : [];
     const built = buildNotificationTopics({
-      selected,
-      flowId: typeof body?.flowId === 'string' ? body.flowId : undefined,
-      conversationId: typeof body?.conversationId === 'string' ? body.conversationId : undefined,
+      flowIds: Array.isArray(body?.flowIds)
+        ? body.flowIds.filter((flowId): flowId is string => typeof flowId === 'string')
+        : [],
     });
 
     if (built.errors.length > 0) {

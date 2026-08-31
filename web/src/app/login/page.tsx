@@ -28,8 +28,8 @@ async function callbackUrl(): Promise<string> {
 
 /**
  * Sign-in. The app holds no interactive Genesys credentials of its own: the user brings their
- * region and OAuth client id, and everything they see afterwards is read with their own token and
- * their own permissions. Only the background ingestion runs under a separate service identity.
+ * region and OAuth client id, and everything they see or capture afterwards runs with their own
+ * token and permissions.
  */
 export default async function LoginPage({
   searchParams,
@@ -40,9 +40,8 @@ export default async function LoginPage({
   const error = params.auth_error ? AUTH_ERRORS[params.auth_error] : undefined;
   const cfg = getServerConfig();
 
-  // GENESYS_REGION is the ingestion region and only seeds the field: whatever the user last used
-  // on this browser wins, and they can always type a different one.
-  const defaultRegion = cfg.ingestion.regionHost?.replace(/^api\./, '') ?? '';
+  // GENESYS_REGION only seeds the field: whatever the user last used on this browser wins.
+  const defaultRegion = cfg.defaultRegionHost?.replace(/^api\./, '') ?? '';
 
   return (
     <main className="login-wrap">

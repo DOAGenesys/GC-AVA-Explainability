@@ -12,13 +12,13 @@ export default async function LiveEventsPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Real-time diagnostics"
-        title="Live Genesys events"
+        eyebrow="Event-driven ingestion"
+        title="Live execution capture"
         description={
           <>
-            Open a temporary WebSocket channel and inspect selected Genesys Cloud notifications as
-            they happen. Events remain in this browser tab only; closing the page stops the live
-            connection and nothing is written to the observability archive.
+            Subscribe to one or many AVA flows, capture each completed execution as it happens, and
+            archive its full trace through the Jobs API. No conversation discovery calls and no
+            scheduled polling.
           </>
         }
       />

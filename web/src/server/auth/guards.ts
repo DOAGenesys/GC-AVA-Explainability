@@ -13,8 +13,8 @@ import {
 } from './session-core';
 
 /**
- * Route-handler authentication, CSRF and cron guards. The signed app session is created only
- * after Genesys Cloud completes the Authorization Code + PKCE callback.
+ * Route-handler authentication and CSRF guards. The signed app session is created only after
+ * Genesys Cloud completes the Authorization Code + PKCE callback.
  */
 
 /** Mint a signed app session token for the authenticated Genesys user. */
@@ -74,22 +74,5 @@ export function requireCsrf(req: NextRequest): void {
   const cookieToken = req.cookies.get(CSRF_COOKIE)?.value;
   if (!headerToken || !cookieToken || !timingSafeEqual(headerToken, cookieToken)) {
     throw new AppError('APP_CSRF_REJECTED', { detail: 'csrf token mismatch' });
-  }
-}
-
-/**
- * Cron routes are not reachable by a user session, so they carry their own bearer secret. Vercel
- * Cron sends `Authorization: Bearer $CRON_SECRET`. Compared in constant time because this is the
- * only thing standing between the public internet and the org's whole Genesys API budget.
- */
-export function requireCronSecret(req: NextRequest): void {
-  const cfg = getServerConfig();
-  if (!cfg.ingestion.cronSecret) {
-    throw new AppError('INGEST_NOT_AUTHORIZED', { detail: 'CRON_SECRET is not configured' });
-  }
-  const provided = req.headers.get('authorization') ?? '';
-  const expected = `Bearer ${cfg.ingestion.cronSecret}`;
-  if (!timingSafeEqual(provided, expected)) {
-    throw new AppError('INGEST_NOT_AUTHORIZED', { detail: 'bad or missing cron secret' });
   }
 }

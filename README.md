@@ -7,7 +7,7 @@ The repository contains two things — a **product**, and the **evidence** that 
 
 | | |
 |---|---|
-| **[`web/`](web/README.md)** | **The application.** A Next.js dashboard on Vercel that ingests AVA activity on a schedule and presents it as explainability and observability views. This is the current deliverable. |
+| **[`web/`](web/README.md)** | **The application.** A Next.js workspace that captures selected AVA flow executions in real time and retrieves full traces through the batched Jobs API. |
 | [`docs/validation-log.md`](docs/validation-log.md) | The measurement record. Every claim the application relies on, with the probe that established it. |
 | [`genesys-cloud-ava-explainability-at-scale-architecture.md`](genesys-cloud-ava-explainability-at-scale-architecture.md) | The original event-driven architecture, and where reality diverged from it. |
 | `collector/`, `infra/` | An AWS EventBridge → SQS → Lambda → S3 prototype. Superseded, retained as evidence. |
@@ -21,12 +21,10 @@ The project began as an event-driven pipeline: subscribe to flow execution notif
 EventBridge, download the execution history each notification points at, archive it. Measuring the
 platform rather than assuming it produced three findings that reshaped the design.
 
-**Notifications cannot carry AVA content.** Of 242 notification topics visible in the validated
-org, 13 relate to flows or bots and none carries tool calls, guardrail outcomes or turn detail. The
-one topic that names an execution retrievably has an `executionHistoryUri` field that was populated
-**0 times out of 30** observed events. Push is therefore only ever a trigger, never a payload — so
-an event-driven pipeline still has to call the Jobs API for every execution, and pays for a
-delivery infrastructure to gain latency rather than efficiency.
+**Notifications carry the retrieval pointer, not AVA content.** Of 242 notification topics visible
+in the validated org, none carries tool calls, guardrail outcomes or turn detail. However,
+`v2.flows.instances.flow.{id}` reliably supplies `executionId`, `flowId` and `conversationId`.
+That is enough to eliminate discovery and submit the execution directly to the Jobs API.
 
 **Execution history batches, and batching is worth 10x.** A job accepts **10** execution ids (11 is
 a hard `422`), costs **2 API calls**, and returns a download URI per entity served from a host that
@@ -40,9 +38,9 @@ responds, produce a session and a transcript but no execution history at all —
 answers 404 for those ids **permanently**, not transiently. On the flow used for validation, that
 was **6 of 7 sessions**.
 
-Together these say that cheap bulk analytics endpoints must be the coverage spine and execution
-history the fidelity layer on top — which is a scheduled pull architecture, not an event-driven
-one. Hence `web/`.
+The current application therefore uses the notification as a zero-discovery trigger and batches
+the supplied execution IDs ten at a time for full-history retrieval. The trade-off is explicit:
+interactive WebSocket capture observes selected flows only while the browser page remains open.
 
 ## Validation environment
 

@@ -1,154 +1,128 @@
-import { CoverageBars } from '@/components/charts';
+import Link from 'next/link';
 import { DataTable } from '@/components/data-table';
 import { PageHeader } from '@/components/page-header';
-import { Card, Empty, Kpi, formatPercent } from '@/components/ui';
-import { getCoverageReport } from '@/server/db';
+import { Card, Empty, Kpi, Pill, ShortId, formatPercent } from '@/components/ui';
+import { getCaptureCoverage } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
 const WINDOW_DAYS = 7;
 
-/**
- * The honesty page.
- *
- * Every observability tool is tempted to report what it can see as though it were everything that
- * happened. For AVA that would be actively misleading: execution history exists only for
- * executions that reach their flow's exit, and on the flow this architecture was validated against
- * that was one session in seven. This view states the shortfall as a number so nobody reads a
- * tool-call chart as a complete account of what the AVA did.
- */
 export default async function CoveragePage() {
-  const report = await getCoverageReport(WINDOW_DAYS);
-
-  const fullFidelityRate =
-    report.sessions > 0 ? report.sessionsWithExecution / report.sessions : null;
-  const transcriptRate = report.sessions > 0 ? report.sessionsWithTurns / report.sessions : null;
+  const report = await getCaptureCoverage(WINDOW_DAYS);
+  const archiveRate = report.observed > 0 ? report.archived / report.observed : null;
 
   return (
     <>
       <PageHeader
         eyebrow="Assurance"
-        title="Coverage"
+        title="Capture coverage"
         description={
           <>
-            How much of what the AVA actually did is visible, and at what fidelity. The gap is not a
-            defect in the ingestion - it is a property of the platform, and it is why the cheap
-            analytics endpoints are the spine of this archive rather than an optimisation on top of
-            execution history.
+            Retrieval outcomes for executions observed while Live capture was active. This view
+            deliberately makes no claim about executions that happened while no browser was
+            listening.
           </>
+        }
+        action={
+          <Link className="btn-link-secondary" href="/live">
+            Open live capture
+          </Link>
         }
       />
 
       <div className="stack">
         <div className="grid grid-kpi">
           <Kpi
-            label="Sessions observed"
-            value={report.sessions.toLocaleString()}
+            label="Executions observed"
+            value={report.observed.toLocaleString()}
             note={`Last ${WINDOW_DAYS} days`}
           />
           <Kpi
-            label="Transcript coverage"
-            value={formatPercent(transcriptRate)}
-            note="Turn-level record captured"
+            label="Archive rate"
+            value={formatPercent(archiveRate)}
+            note={`${report.archived.toLocaleString()} full traces`}
           />
           <Kpi
-            label="Full-trace coverage"
-            value={formatPercent(fullFidelityRate)}
-            note="Tool-level execution history retrieved"
+            label="No history"
+            value={report.noHistory.toLocaleString()}
+            note="Confirmed by Genesys 404"
           />
           <Kpi
-            label="Analytics only"
-            value={report.sessionsWithoutExecution.toLocaleString()}
-            note="No execution trace will ever exist"
-            accent={report.sessionsWithoutExecution > 0}
+            label="Retryable failures"
+            value={report.failed.toLocaleString()}
+            note="Jobs or download failures"
+            accent={report.failed > 0}
+          />
+          <Kpi
+            label="Truncated traces"
+            value={report.truncated.toLocaleString()}
+            note="Marked by Genesys"
+            accent={report.truncated > 0}
           />
         </div>
 
         <div className="callout">
-          <strong>Why the two numbers differ</strong>
-          Bot flow analytics records a session as soon as a conversation reaches the flow. Execution
-          history is only written when an execution terminates by reaching its flow&apos;s exit. A
-          conversation the customer abandoned, or one whose flow has no exit path after the AVA
-          responds, produces a session and a transcript but no execution history at all - and the
-          Jobs API answers 404 for it permanently rather than transiently.{' '}
-          {report.sessionsWithNoHistory > 0 ? (
-            <>
-              {report.sessionsWithNoHistory.toLocaleString()} session
-              {report.sessionsWithNoHistory === 1 ? ' has' : 's have'} been confirmed in that state
-              by an actual Jobs response, rather than merely being unresolved.
-            </>
-          ) : null}
+          <strong>What “coverage” means here</strong>
+          WebSocket topics require explicit flow IDs and remain active only while the capture page
+          is open. The observed count is therefore a measured capture population, not an estimate of
+          all org executions. Within that population, every valid event goes directly to Jobs with
+          no discovery call.
         </div>
 
-        <Card title="Fidelity by outcome" subtitle="Which kinds of conversation lose their trace">
-          {report.byCategory.length > 0 ? (
-            <>
-              <CoverageBars data={report.byCategory} />
-              <div className="legend">
-                <span>
-                  <i className="swatch swatch-good" aria-hidden="true" /> Full trace: transcript
-                  plus tool-level execution history
-                </span>
-                <span>
-                  <i className="swatch swatch-alert" aria-hidden="true" /> Analytics only:
-                  transcript and outcome, no tool detail
-                </span>
-              </div>
-            </>
+        <Card title="Retrieval by flow" subtitle="Observed executions, newest seven-day window">
+          {report.byFlow.length > 0 ? (
+            <DataTable label="Capture coverage by flow">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Flow</th>
+                    <th scope="col" className="num">
+                      Observed
+                    </th>
+                    <th scope="col" className="num">
+                      Archived
+                    </th>
+                    <th scope="col" className="num">
+                      No history
+                    </th>
+                    <th scope="col" className="num">
+                      Failed
+                    </th>
+                    <th scope="col">Health</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.byFlow.map((flow) => (
+                    <tr key={flow.flowId}>
+                      <td>
+                        <strong>{flow.flowName ?? 'Unnamed flow'}</strong>
+                        <br />
+                        <ShortId id={flow.flowId} />
+                      </td>
+                      <td className="num">{flow.observed}</td>
+                      <td className="num">{flow.archived}</td>
+                      <td className="num">{flow.noHistory || '—'}</td>
+                      <td className="num">{flow.failed || '—'}</td>
+                      <td>
+                        {flow.failed > 0 ? (
+                          <Pill tone="bad">Needs retry</Pill>
+                        ) : flow.archived > 0 ? (
+                          <Pill tone="good">Healthy</Pill>
+                        ) : (
+                          <Pill tone="warn">No archive</Pill>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </DataTable>
           ) : (
-            <Empty title="No sessions in this window" />
+            <Empty title="No executions observed yet">
+              Start Live capture and complete one of the selected flows.
+            </Empty>
           )}
-        </Card>
-
-        <Card title="What to do about the gap">
-          <DataTable label="Coverage gap recommendations">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Observation</th>
-                  <th scope="col">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>No session anywhere has a trace</td>
-                  <td>
-                    Discovery returns an empty result rather than an error for every possible cause,
-                    so check them in order: execution data enabled under Admin → Organization
-                    Settings → Settings → Execution Data, no per-flow override turning it back off,
-                    the flow republished after it was enabled since capture is never backfilled, and
-                    the ingest credential holding Architect → Flow Instance → View and Search for
-                    the flow&apos;s division. A credential missing either permission is shown zero
-                    instances rather than being refused. Confirm the query itself still works before
-                    concluding any of the above, with <code>node scripts/probe-execution.mjs</code>{' '}
-                    against an execution id taken from an Architect export — a rejected query also
-                    reports as zero.
-                  </td>
-                </tr>
-                <tr>
-                  <td>A flow shows a persistently low full-trace rate</td>
-                  <td>
-                    Check the flow design for a missing exit path after the AVA response. An
-                    execution that never terminates never produces history, so this is fixable in
-                    Architect rather than here.
-                  </td>
-                </tr>
-                <tr>
-                  <td>Sessions categorised as customer disconnect lack traces</td>
-                  <td>
-                    Expected and not fixable. Rely on the transcript, which is captured for these.
-                  </td>
-                </tr>
-                <tr>
-                  <td>Transcript coverage below full</td>
-                  <td>
-                    Ingestion is falling behind the upstream 10-day retention window. Check the cron
-                    history on the API budget view - anything missed past that window is gone.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </DataTable>
         </Card>
       </div>
     </>

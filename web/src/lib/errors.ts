@@ -16,9 +16,7 @@ export const ERROR_CODES = [
   'GENESYS_AUTH_FAILED',
   'GENESYS_PERMISSION_DENIED',
   'GENESYS_NOTIFICATION_PERMISSION_DENIED',
-  // Ingestion
-  'INGEST_NOT_AUTHORIZED',
-  'INGEST_FAILED',
+  // Capture
   'JOBS_BATCH_REJECTED',
   'NO_EXECUTION_HISTORY',
   // Infra
@@ -71,7 +69,7 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     severity: 'error',
     retryable: false,
     message: 'Nothing was found for this identifier.',
-    nextAction: 'Check the identifier, or wait for the next ingestion pass.',
+    nextAction: 'Check the identifier or start a live capture for the relevant flow.',
     httpStatus: 404,
   },
   GENESYS_NOT_CONFIGURED: {
@@ -95,8 +93,7 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     severity: 'error',
     retryable: false,
     message: 'Your Genesys user does not have permission for this operation.',
-    nextAction:
-      'Ask an administrator for architect:flow:view, architect:flowInstance:view and analytics:botFlowReportingTurn:view.',
+    nextAction: 'Ask an administrator for Architect Flow Instance View access.',
     httpStatus: 403,
   },
   GENESYS_NOTIFICATION_PERMISSION_DENIED: {
@@ -107,22 +104,6 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     nextAction:
       'Grant the signed-in user Notifications subscription and topic-specific access, ensure the Code Authorization client permits it, then sign in again.',
     httpStatus: 403,
-  },
-  INGEST_NOT_AUTHORIZED: {
-    code: 'INGEST_NOT_AUTHORIZED',
-    severity: 'error',
-    retryable: false,
-    message: 'This ingestion endpoint requires the cron secret.',
-    nextAction: 'Only Vercel Cron may invoke this route.',
-    httpStatus: 401,
-  },
-  INGEST_FAILED: {
-    code: 'INGEST_FAILED',
-    severity: 'error',
-    retryable: true,
-    message: 'An ingestion pass failed.',
-    nextAction: 'The next scheduled pass will retry from the last watermark.',
-    httpStatus: 500,
   },
   JOBS_BATCH_REJECTED: {
     code: 'JOBS_BATCH_REJECTED',
@@ -137,7 +118,7 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     severity: 'info',
     retryable: false,
     message: 'Genesys holds no execution history for this execution.',
-    nextAction: 'Use the turn-level analytics view, which covers executions that never terminated.',
+    nextAction: 'No retry is needed; the platform confirmed that no history is available.',
     httpStatus: 404,
   },
   DATABASE_NOT_CONFIGURED: {
@@ -185,7 +166,7 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     severity: 'error',
     retryable: false,
     message: 'An unexpected error occurred.',
-    nextAction: 'Check the ingestion log and retry.',
+    nextAction: 'Check the capture log and retry.',
     httpStatus: 500,
   },
 };

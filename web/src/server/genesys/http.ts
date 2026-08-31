@@ -2,7 +2,7 @@ import 'server-only';
 
 import { AppError } from '@/lib/errors';
 import { logger, redactUrl } from '../logger';
-import { getAccessToken, getIngestionAccessToken, type GenesysAuthContext } from './oauth';
+import { getAccessToken, type GenesysAuthContext } from './oauth';
 
 /**
  * Genesys Platform API transport with retry, 401 re-auth, and - the part that matters here - API
@@ -33,7 +33,7 @@ function budgetKey(path: string): string {
     .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/{id}');
 }
 
-export type Identity = { kind: 'ingestion' } | { kind: 'user'; context?: GenesysAuthContext };
+export type Identity = { kind: 'user'; context?: GenesysAuthContext };
 
 export interface RequestOptions {
   path: string;
@@ -79,9 +79,6 @@ async function resolveIdentity(
   identity: Identity,
   forceRefresh: boolean,
 ): Promise<{ accessToken: string; regionHost: string }> {
-  if (identity.kind === 'ingestion') {
-    return getIngestionAccessToken({ forceRefresh });
-  }
   const result = await getAccessToken(identity.context, { forceRefresh });
   return { accessToken: result.accessToken, regionHost: result.regionHost };
 }

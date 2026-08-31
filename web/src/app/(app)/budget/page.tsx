@@ -2,20 +2,19 @@ import { BudgetLine } from '@/components/charts';
 import { DataTable } from '@/components/data-table';
 import { PageHeader } from '@/components/page-header';
 import { Card, Empty, Kpi, Pill, formatDateTime, formatMs } from '@/components/ui';
-import { listIngestRuns } from '@/server/db';
+import { listCaptureRuns } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * API budget and ingestion health.
+ * API budget and capture health.
  *
  * This page exists because the design rests on a measured number - ten execution ids per job, two
  * API calls per job, so 0.2 calls per execution - and a number nobody watches is a number that
- * quietly stops being true. Every ingestion pass records its own call count, so the claim is
- * re-evidenced by production traffic rather than by the probe that first established it.
+ * quietly stops being true. Every capture batch records its own call count.
  */
 export default async function BudgetPage() {
-  const runs = await listIngestRuns(120);
+  const runs = await listCaptureRuns(120);
 
   // react-hooks/purity cannot yet tell a Server Component from a client one. This renders once per
   // request on the server, so there is no re-render for an unstable clock read to destabilise.
@@ -33,7 +32,7 @@ export default async function BudgetPage() {
   const meanRatio = ratios.length > 0 ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null;
 
   const series = [...runs]
-    .filter((r) => r.kind === 'fidelity')
+    .filter((r) => r.kind === 'capture')
     .reverse()
     .slice(-40)
     .map((r) => ({
@@ -52,7 +51,7 @@ export default async function BudgetPage() {
         title="API budget"
         description={
           <>
-            Ingestion cost, measured continuously. Content downloads are excluded on purpose: job
+            Capture cost, measured continuously. Content downloads are excluded on purpose: job
             payloads are served from the region&apos;s download host rather than the Platform API,
             so the bytes do not consume the API allowance. Only the calls counted here do.
           </>
@@ -64,7 +63,7 @@ export default async function BudgetPage() {
           <Kpi
             label="API calls, 24h"
             value={calls24h.toLocaleString()}
-            note={`${last24h.length} ingestion passes`}
+            note={`${last24h.length} capture batches`}
           />
           <Kpi
             label="Executions retrieved, 24h"
@@ -95,31 +94,27 @@ export default async function BudgetPage() {
           <div className="callout alert">
             <strong>Cost per execution is above the batched floor.</strong>A job costs the same two
             calls whether it carries one execution id or ten, so a ratio near 2.0 means batches are
-            running nearly empty - usually because the fidelity pass is finding only one or two
-            pending conversations each time it runs. Lengthening the cron interval will raise the
-            batch fill and lower the ratio.
+            running nearly empty. Leave capture running across more flows, or allow the 30-second
+            buffer to collect more execution events before using Archive pending now.
           </div>
         ) : null}
 
-        <Card
-          title="Fidelity pass cost over time"
-          subtitle="Calls per run against calls per execution"
-        >
+        <Card title="Capture cost over time" subtitle="Calls per run against calls per execution">
           {series.length > 0 ? (
             <BudgetLine data={series} />
           ) : (
-            <Empty title="No fidelity passes recorded yet" />
+            <Empty title="No capture batches recorded yet" />
           )}
         </Card>
 
-        <Card title="Ingestion history" subtitle="Newest first">
+        <Card title="Capture history" subtitle="Newest first">
           {runs.length > 0 ? (
-            <DataTable label="Ingestion run history">
+            <DataTable label="Capture batch history">
               <table>
                 <thead>
                   <tr>
                     <th scope="col">Started</th>
-                    <th scope="col">Pass</th>
+                    <th scope="col">Mode</th>
                     <th scope="col">Status</th>
                     <th scope="col" className="num">
                       Duration
@@ -161,9 +156,8 @@ export default async function BudgetPage() {
               </table>
             </DataTable>
           ) : (
-            <Empty title="No ingestion has run yet">
-              Vercel Cron invokes the three passes on schedule. Confirm CRON_SECRET is set and the
-              project is on a plan that permits sub-daily cron schedules.
+            <Empty title="No capture has run yet">
+              Open Live capture, choose at least one flow, and complete an execution.
             </Empty>
           )}
         </Card>

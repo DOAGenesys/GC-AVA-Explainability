@@ -4,26 +4,13 @@ import 'server-only';
  * Server configuration, parsed lazily from the environment and memoized. Secrets are read here
  * but NEVER returned to the browser - only readiness booleans and non-secret limits cross over.
  *
- * There are deliberately two Genesys identities:
- *
- *   - **Interactive**: the signed-in user's own Authorization Code + PKCE session. The app boots
- *     with no server-side credentials; the user supplies region and client id at sign-in, exactly
- *     as in GC_Knowledge_File_Handler. Everything a human triggers runs as that human.
- *   - **Ingestion**: a client-credentials grant used only by the Vercel cron routes. Background
- *     ingestion cannot borrow a user's cookie, and tying an org-wide observability archive to one
- *     person's session would make the archive stop the day they leave.
+ * Genesys operations use the signed-in user's Authorization Code + PKCE session. The deployment can
+ * provide a default region for the login form, but it stores no background Genesys credential.
  */
 
 function int(value: string | undefined, fallback: number): number {
   const n = value != null ? Number.parseInt(value, 10) : NaN;
   return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function list(value: string | undefined): string[] {
-  return (value ?? '')
-    .split(/[\s,]+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 }
 
 /**
@@ -55,18 +42,7 @@ export interface ServerConfig {
     sessionTtlMinutes: number;
     configured: boolean;
   };
-  ingestion: {
-    clientId: string | null;
-    clientSecret: string | null;
-    regionHost: string | null;
-    cronSecret: string | null;
-    configured: boolean;
-    /** Flow ids to ingest. Empty means "every flow whose AVA flag is set", resolved at runtime. */
-    flowIds: string[];
-    lookbackMinutes: number;
-    turnsLookbackMinutes: number;
-    maxExecutionsPerRun: number;
-  };
+  defaultRegionHost: string | null;
   /** Measured Jobs API acceptance ceiling. Not a tuning knob - 11 ids is a hard 422. */
   jobsMaxIdsPerRequest: number;
   environmentLabel: string;
@@ -79,9 +55,7 @@ export function getServerConfig(): ServerConfig {
   if (cached) return cached;
 
   const sessionSecret = process.env.APP_SESSION_SECRET || null;
-  const clientId = process.env.GENESYS_INGEST_CLIENT_ID?.trim() || null;
-  const clientSecret = process.env.GENESYS_INGEST_CLIENT_SECRET?.trim() || null;
-  const regionHost = normalizeRegionHost(process.env.GENESYS_REGION);
+  const defaultRegionHost = normalizeRegionHost(process.env.GENESYS_REGION);
 
   cached = {
     auth: {
@@ -89,27 +63,7 @@ export function getServerConfig(): ServerConfig {
       sessionTtlMinutes: int(process.env.SESSION_TTL_MINUTES, 720),
       configured: Boolean(sessionSecret),
     },
-    ingestion: {
-      clientId,
-      clientSecret,
-      regionHost,
-      cronSecret: process.env.CRON_SECRET || null,
-      configured: Boolean(clientId && clientSecret && regionHost),
-      flowIds: list(process.env.AVA_FLOW_IDS),
-      // Bounds the session query. Overlaps the 10-minute cron cadence by a wide margin on purpose:
-      // session data appears with some lag, and a window matching the schedule loses whatever
-      // landed a second late. Upserts make the overlap free.
-      lookbackMinutes: int(process.env.INGEST_LOOKBACK_MINUTES, 240),
-      // Turns get their own, much wider window, defaulting to the full upstream TTL.
-      //
-      // The reporting-turns endpoint does honour `interval` - a four-hour window was measured
-      // returning zero turns for sessions four days old, where an unbounded request returned 45.
-      // Since this archive is the only durable copy of data the platform deletes after 10 days,
-      // the window is set to cover the whole retention period rather than just what is new: a turn
-      // missed here cannot be recovered later, while re-reading one costs an idempotent upsert.
-      turnsLookbackMinutes: int(process.env.INGEST_TURNS_LOOKBACK_MINUTES, 14_400),
-      maxExecutionsPerRun: int(process.env.INGEST_MAX_EXECUTIONS_PER_RUN, 200),
-    },
+    defaultRegionHost,
     jobsMaxIdsPerRequest: int(process.env.JOBS_MAX_IDS, 10),
     environmentLabel: process.env.NEXT_PUBLIC_ENVIRONMENT_LABEL?.trim() || 'local',
     appVersion: process.env.NEXT_PUBLIC_APP_VERSION?.trim() || '0.1.0',
@@ -124,7 +78,6 @@ export function __resetConfigCache(): void {
 
 export interface ReadinessReport {
   authConfigured: boolean;
-  ingestionConfigured: boolean;
   databaseConfigured: boolean;
   missing: string[];
   environmentLabel: string;
@@ -135,15 +88,10 @@ export function getReadiness(): ReadinessReport {
   const cfg = getServerConfig();
   const missing: string[] = [];
   if (!cfg.auth.sessionSecret) missing.push('APP_SESSION_SECRET');
-  if (!cfg.ingestion.clientId) missing.push('GENESYS_INGEST_CLIENT_ID');
-  if (!cfg.ingestion.clientSecret) missing.push('GENESYS_INGEST_CLIENT_SECRET');
-  if (!cfg.ingestion.regionHost) missing.push('GENESYS_REGION');
-  if (!cfg.ingestion.cronSecret) missing.push('CRON_SECRET');
   if (!process.env.POSTGRES_URL) missing.push('POSTGRES_URL');
 
   return {
     authConfigured: cfg.auth.configured,
-    ingestionConfigured: cfg.ingestion.configured,
     databaseConfigured: Boolean(process.env.POSTGRES_URL),
     missing,
     environmentLabel: cfg.environmentLabel,

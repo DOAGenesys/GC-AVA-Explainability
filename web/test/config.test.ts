@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { __resetConfigCache, getServerConfig, normalizeRegionHost } from '@/server/config';
+import {
+  __resetConfigCache,
+  getReadiness,
+  getServerConfig,
+  normalizeRegionHost,
+} from '@/server/config';
 
 describe('normalizeRegionHost', () => {
   it('accepts a bare region domain', () => {
@@ -28,33 +33,33 @@ describe('normalizeRegionHost', () => {
   });
 });
 
-describe('ingestion lookback windows', () => {
+describe('event-driven configuration', () => {
   afterEach(() => {
-    delete process.env.INGEST_LOOKBACK_MINUTES;
-    delete process.env.INGEST_TURNS_LOOKBACK_MINUTES;
+    delete process.env.GENESYS_REGION;
+    delete process.env.GENESYS_INGEST_CLIENT_ID;
+    delete process.env.GENESYS_INGEST_CLIENT_SECRET;
+    delete process.env.CRON_SECRET;
     __resetConfigCache();
   });
 
-  // Reusing the session window for turns silently stopped turn capture once: a four-hour window
-  // returned nothing for sessions days old, and because the platform deletes turns after 10 days
-  // that gap was unrecoverable. The turn window must stay wide regardless of the session window.
-  it('defaults the turn window to the full upstream retention period', () => {
+  it('uses the deployment region only as an optional sign-in default', () => {
+    process.env.GENESYS_REGION = 'mypurecloud.de';
     __resetConfigCache();
-    expect(getServerConfig().ingestion.turnsLookbackMinutes).toBe(14_400);
+    expect(getServerConfig().defaultRegionHost).toBe('api.mypurecloud.de');
   });
 
-  it('keeps the turn window independent of a narrowed session window', () => {
-    process.env.INGEST_LOOKBACK_MINUTES = '15';
+  it('does not require cron or client-credentials settings for readiness', () => {
+    process.env.GENESYS_INGEST_CLIENT_ID = 'legacy-client';
+    process.env.GENESYS_INGEST_CLIENT_SECRET = 'legacy-secret';
+    process.env.CRON_SECRET = 'legacy-cron';
     __resetConfigCache();
 
-    const { lookbackMinutes, turnsLookbackMinutes } = getServerConfig().ingestion;
-    expect(lookbackMinutes).toBe(15);
-    expect(turnsLookbackMinutes).toBeGreaterThan(lookbackMinutes);
-  });
-
-  it('still allows the turn window to be tuned explicitly', () => {
-    process.env.INGEST_TURNS_LOOKBACK_MINUTES = '600';
-    __resetConfigCache();
-    expect(getServerConfig().ingestion.turnsLookbackMinutes).toBe(600);
+    expect(getReadiness().missing).not.toEqual(
+      expect.arrayContaining([
+        'GENESYS_INGEST_CLIENT_ID',
+        'GENESYS_INGEST_CLIENT_SECRET',
+        'CRON_SECRET',
+      ]),
+    );
   });
 });

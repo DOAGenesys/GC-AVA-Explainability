@@ -20,12 +20,8 @@ import {
 import { logger } from '../logger';
 
 /**
- * Genesys OAuth helpers for both identities the app uses.
- *
- *   - Authorization Code + PKCE for the signed-in human. Access and refresh tokens live only
- *     inside an encrypted HttpOnly cookie; nothing is persisted server-side.
- *   - Client credentials for the cron ingestion routes, cached in module scope for the lifetime
- *     of the serverless instance.
+ * Genesys Authorization Code + PKCE helpers. Access and refresh tokens live only inside an
+ * encrypted HttpOnly cookie; nothing is persisted server-side.
  */
 
 const TOKEN_PATH = '/oauth/token';
@@ -258,46 +254,6 @@ export async function getAccessToken(
     authContext,
     refreshed: true,
   };
-}
-
-// --------------------------------------------------------------------- ingestion identity
-
-let ingestionToken: { value: string; expiresAtMs: number } | null = null;
-
-/**
- * Client-credentials token for the cron routes, cached for the instance's lifetime.
- *
- * Ingestion cannot use a user's PKCE cookie: cron has no cookie jar, and an org-wide archive that
- * depended on one person's session would break the day that person's token was revoked.
- */
-export async function getIngestionAccessToken(options: { forceRefresh?: boolean } = {}): Promise<{
-  accessToken: string;
-  regionHost: string;
-}> {
-  const cfg = getServerConfig();
-  if (!cfg.ingestion.configured || !cfg.ingestion.regionHost) {
-    throw new AppError('GENESYS_NOT_CONFIGURED', { detail: 'ingestion credentials missing' });
-  }
-
-  if (!options.forceRefresh && ingestionToken && Date.now() < ingestionToken.expiresAtMs) {
-    return { accessToken: ingestionToken.value, regionHost: cfg.ingestion.regionHost };
-  }
-
-  const token = await postToken(
-    cfg.ingestion.regionHost,
-    new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: cfg.ingestion.clientId ?? '',
-      client_secret: cfg.ingestion.clientSecret ?? '',
-    }),
-  );
-
-  // 60s of margin so a token cannot expire between submitting a job and polling it.
-  ingestionToken = {
-    value: token.access_token,
-    expiresAtMs: Date.now() + token.expires_in * 1000 - 60_000,
-  };
-  return { accessToken: token.access_token, regionHost: cfg.ingestion.regionHost };
 }
 
 // --------------------------------------------------------------------- interactive login

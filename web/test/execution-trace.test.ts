@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { parseTrace, type FlowExecutionTrace } from '@/server/genesys/ava';
+import { isConfirmedNoHistory, parseTrace, type FlowExecutionTrace } from '@/server/genesys/ava';
 
 /**
  * These assertions run against an unedited execution data export taken from Architect, because the
@@ -19,6 +19,15 @@ import { parseTrace, type FlowExecutionTrace } from '@/server/genesys/ava';
 const fixture = JSON.parse(
   readFileSync(new URL('./fixtures/ava-execution-trace.json', import.meta.url), 'utf8'),
 ) as FlowExecutionTrace;
+
+describe('Jobs no-history classification', () => {
+  it('accepts either string or numeric 404 only when the entity failed', () => {
+    expect(isConfirmedNoHistory(true, '404')).toBe(true);
+    expect(isConfirmedNoHistory(true, 404)).toBe(true);
+    expect(isConfirmedNoHistory(false, 404)).toBe(false);
+    expect(isConfirmedNoHistory(true, 500)).toBe(false);
+  });
+});
 
 describe('parseTrace against a real Architect export', () => {
   it('reads the flow-level metadata the archive is keyed and filtered on', () => {

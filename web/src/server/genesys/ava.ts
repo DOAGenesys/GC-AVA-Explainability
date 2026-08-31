@@ -195,8 +195,8 @@ export async function getBotFlowSessions(
     if (pageNumber >= (res.data.pageCount ?? 1)) break;
   }
 
-  // A session without a conversation id can never gain an execution trace, so this is reported as a
-  // warning rather than left to be inferred from an empty fidelity pass.
+  // A historical session without a conversation id can never be linked to an execution trace, so
+  // this is reported explicitly.
   if (missingConversationId > 0) {
     logger.warn('ava.sessions.missing_conversation_id', {
       flowId,
@@ -511,121 +511,6 @@ export async function getReportingTurns(
   return turns;
 }
 
-// --------------------------------------------------------------------------- execution discovery
-
-/** Enough parallelism to drain a backlog within a cron invocation, well short of rate limiting. */
-const DISCOVERY_CONCURRENCY = 4;
-
-/**
- * Resolve conversation ids to flow execution ids.
- *
- * This is the discovery step, and it exists because the Jobs API cannot list - it only answers
- * "give me these ids". `ConversationId` is used because it is one of the criteria this org's query
- * capabilities actually permit, and because the triage pass has already produced conversation ids
- * for free. No temporal criterion is available, so the window is expressed by which conversations
- * are asked about rather than by a date filter.
- *
- * The criteria vocabulary is gated per org rather than by the OpenAPI enum, so what is permitted
- * comes from `GET /flows/instances/querycapabilities` and nothing else. Asking outside it fails
- * with 400 "Attempting to query with unallowed capabilities".
- */
-export async function findExecutionIds(
-  conversationIds: string[],
-  identity: Identity,
-  budget: ApiBudget,
-): Promise<Map<string, { executionId: string; flowId: string; flowVersion: string | null }[]>> {
-  const byConversation = new Map<
-    string,
-    { executionId: string; flowId: string; flowVersion: string | null }[]
-  >();
-  if (conversationIds.length === 0) return byConversation;
-
-  // One conversation per request, and this is a constraint rather than a choice. A CriteriaItem
-  // carries a single `value`, and an `or` group of several ConversationId predicates - the obvious
-  // way to restore batching - is rejected with a bare 422 "input data is not valid". So the cost is
-  // one call per conversation, and concurrency is what keeps a backlog inside the cron's wall clock.
-  const queue = [...new Set(conversationIds)];
-  let cursor = 0;
-  let failed = 0;
-
-  async function drain(): Promise<void> {
-    while (cursor < queue.length) {
-      const conversationId = queue[cursor]!;
-      cursor += 1;
-
-      const res = await genesysRequest<{
-        entities?: {
-          id?: string;
-          flowId?: string;
-          flowVersion?: string;
-          conversationId?: string;
-        }[];
-      }>({
-        path: '/api/v2/flows/instances/query',
-        method: 'POST',
-        query: { pageSize: 200 },
-        body: {
-          // A CriteriaQuery: `query` holds CriteriaGroups, each with and/or/not arrays of
-          // CriteriaItem {key, operator, value}. The plural `criteriaKey`/`values` spelling belongs
-          // to the querycapabilities *response*, and sending it here is not an error the endpoint
-          // reports - it answers 200 with an empty list, which is indistinguishable from an org
-          // that captures no execution data. That cost weeks, hence the specificity of this note.
-          query: [{ and: [{ key: 'ConversationId', operator: 'eq', value: conversationId }] }],
-        },
-        identity,
-        budget,
-        expectedStatuses: [404, 422],
-      });
-
-      if (!res.ok || !res.data) {
-        failed += 1;
-        logger.warn('ava.discovery.query_failed', { status: res.status, conversationId });
-        continue;
-      }
-
-      const found: { executionId: string; flowId: string; flowVersion: string | null }[] = [];
-      for (const entity of res.data.entities ?? []) {
-        // `id` is the execution id; the entity is not required to echo the conversation back, so
-        // the id we asked with is the one used for keying.
-        if (!entity.id) continue;
-        found.push({
-          executionId: entity.id,
-          flowId: entity.flowId ?? '',
-          flowVersion: entity.flowVersion ?? null,
-        });
-      }
-      if (found.length > 0) byConversation.set(conversationId, found);
-    }
-  }
-
-  const workers = Math.min(DISCOVERY_CONCURRENCY, queue.length);
-  await Promise.all(Array.from({ length: workers }, () => drain()));
-
-  // Asked, matched and failed are reported together because a 200 with an empty list is the
-  // endpoint's answer to several unrelated situations, and they need different responses. Failures
-  // are counted separately so a rejected query can never again be read as an org that captures no
-  // execution data.
-  const matched = byConversation.size;
-  if (conversationIds.length > 0 && matched === 0) {
-    logger.warn('ava.discovery.no_executions', {
-      asked: conversationIds.length,
-      failed,
-      hint:
-        failed > 0
-          ? 'Every query was rejected. Check the criteria against GET /flows/instances/querycapabilities.'
-          : 'Queries succeeded and matched nothing. Execution data storage is off by default: Admin > Organization Settings > Settings > Execution Data, then republish the flows.',
-    });
-  } else if (matched < conversationIds.length) {
-    logger.info('ava.discovery.partial_match', {
-      asked: conversationIds.length,
-      matched,
-      failed,
-    });
-  }
-
-  return byConversation;
-}
-
 // --------------------------------------------------------------------------- execution history
 
 export interface JobEntityResult {
@@ -678,7 +563,12 @@ async function submitOneJob(
   while (Date.now() < deadline) {
     const poll = await genesysRequest<{
       jobState?: string;
-      entities?: { id?: string; failed?: boolean; statusCode?: string; downloadUri?: string }[];
+      entities?: {
+        id?: string;
+        failed?: boolean;
+        statusCode?: string | number;
+        downloadUri?: string;
+      }[];
     }>({ path: `/api/v2/flows/instances/jobs/${jobId}`, identity, budget });
     apiCalls += 1;
 
@@ -700,7 +590,7 @@ async function submitOneJob(
           // job that reached Success, flagged failed with statusCode 404. Counting entities rather
           // than unfailed entities is how an empty archive comes to look like a complete one.
           failed: Boolean(entity.failed),
-          statusCode: entity.statusCode ?? null,
+          statusCode: entity.statusCode == null ? null : String(entity.statusCode),
           downloadUri: entity.downloadUri ?? null,
         });
       }
@@ -774,6 +664,10 @@ export interface RetrievalOutcome {
   apiCallsPerExecution: number;
 }
 
+export function isConfirmedNoHistory(failed: boolean, statusCode: unknown): boolean {
+  return failed && String(statusCode) === '404';
+}
+
 /**
  * Retrieve full execution history for a set of executions, batched at the measured ceiling.
  *
@@ -807,13 +701,36 @@ export async function retrieveExecutionHistories(
   for (const executionId of unique) {
     const outcome = resolved.get(executionId);
 
-    if (!outcome || outcome.failed || !outcome.downloadUri) {
+    if (!outcome) {
+      executions.push({
+        executionId,
+        trace: null,
+        bytes: 0,
+        noHistory: false,
+        statusCode: null,
+      });
+      continue;
+    }
+
+    const confirmedAbsent = isConfirmedNoHistory(outcome.failed, outcome.statusCode);
+    if (confirmedAbsent) {
       executions.push({
         executionId,
         trace: null,
         bytes: 0,
         noHistory: true,
-        statusCode: outcome?.statusCode ?? null,
+        statusCode: outcome.statusCode,
+      });
+      continue;
+    }
+
+    if (outcome.failed || !outcome.downloadUri) {
+      executions.push({
+        executionId,
+        trace: null,
+        bytes: 0,
+        noHistory: false,
+        statusCode: outcome.statusCode ?? 'rejected',
       });
       continue;
     }

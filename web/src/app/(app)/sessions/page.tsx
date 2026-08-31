@@ -84,7 +84,8 @@ export default async function SessionsPage() {
           </DataTable>
         ) : (
           <Empty title="No sessions in this window">
-            The triage pass populates this table every ten minutes.
+            This historical analytics view contains sessions captured by the retired polling
+            pipeline. New execution traces arrive through Live capture.
           </Empty>
         )}
       </Card>

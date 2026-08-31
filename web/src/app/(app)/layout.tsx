@@ -39,7 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
           <span className="nav-label">Explainability</span>
           <NavLink href="/sessions">Sessions</NavLink>
-          <NavLink href="/live">Live events</NavLink>
+          <NavLink href="/live">Live capture</NavLink>
 
           <span className="nav-label">Assurance</span>
           <NavLink href="/coverage">Coverage</NavLink>
