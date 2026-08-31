@@ -155,8 +155,9 @@ try {
   `);
   console.table(eligible);
   console.log(
-    'If this is 0, the fidelity pass has nothing to ask the Jobs API about, which is why no\n' +
-      'execution trace ever appears. The cause is upstream: session conversation ids are missing.',
+    'Zero here means the fidelity pass has nothing to ask about, and the fix is the missing session\n' +
+      'conversation ids. A non-zero count rules that out: discovery is running and finding nothing,\n' +
+      'which points at execution data storage being disabled org-wide instead.',
   );
 
   // ------------------------------------------------------------- the shape the platform sends
@@ -177,6 +178,35 @@ try {
   if (sample.length > 0) {
     heading('sample turn, values redacted unless structurally identifying');
     console.log(describeShape(sample[0].raw).join('\n'));
+  }
+
+  // If AVA tool invocations ride along on the turn, tool-level explainability is available from an
+  // endpoint already being called, without execution data storage being enabled at all.
+  heading('tool metadata carried on turns');
+
+  const { rows: events } = await db.query(`
+    SELECT count(*)                                                  AS turns_with_events,
+           coalesce(sum(jsonb_array_length(raw->'botFlowInvocationEvents')), 0) AS total_events
+    FROM ava_turns
+    WHERE jsonb_typeof(raw->'botFlowInvocationEvents') = 'array'
+      AND jsonb_array_length(raw->'botFlowInvocationEvents') > 0
+  `);
+  console.table(events);
+
+  const { rows: eventSample } = await db.query(`
+    SELECT raw->'botFlowInvocationEvents' AS events
+    FROM ava_turns
+    WHERE jsonb_typeof(raw->'botFlowInvocationEvents') = 'array'
+      AND jsonb_array_length(raw->'botFlowInvocationEvents') > 0
+    LIMIT 1
+  `);
+  if (eventSample.length === 0) {
+    console.log(
+      'Every turn carries this field but all are empty, so tool detail is only available from\n' +
+        'execution data, which has to be enabled org-wide before it is recorded.',
+    );
+  } else {
+    console.log(describeShape(eventSample[0].events).join('\n'));
   }
 
   // ------------------------------------------------------------------ live probe
@@ -281,11 +311,45 @@ try {
       });
       console.log(`querycapabilities: HTTP ${capsRes.status}`);
       if (capsRes.ok) {
-        // Names the criteria this org is actually allowed to query by, which is the difference
-        // between a wrong criteria key and genuinely absent execution data.
-        console.log(JSON.stringify(await capsRes.json(), null, 2).slice(0, 2000));
+        // Compact, because only the criteria keys and their operators matter here.
+        const caps = await capsRes.json();
+        console.table(
+          (caps.criteria ?? []).map((c) => ({
+            criteriaKey: c.criteriaKey,
+            operators: (c.operators ?? []).join(','),
+            dataType: c.dataType,
+          })),
+        );
       } else {
         console.log((await capsRes.text()).slice(0, 500));
+      }
+
+      // Querying by flow separates "no execution data exists" from "the conversation criteria is
+      // not matching". Both return 200 with an empty list, so only this comparison tells them apart.
+      for (const flow of flows) {
+        const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=50`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            criteria: [{ criteriaKey: 'FlowId', values: [flow.flow_id], operator: 'eq' }],
+          }),
+        });
+        const text = await res.text();
+        let count = 'n/a';
+        let note = '';
+        try {
+          const body = JSON.parse(text);
+          if (res.ok) {
+            count = (body.entities ?? []).length;
+            if (count > 0) note = Object.keys(body.entities[0]).join(', ');
+          } else {
+            note = JSON.stringify(body).slice(0, 200);
+          }
+        } catch {
+          note = text.slice(0, 200);
+        }
+        console.log(`\nFlowId probe ${flow.name}: HTTP ${res.status}, instances: ${count}`);
+        if (note) console.log(`  ${note}`);
       }
 
       const { rows: convRows } = await db.query(`
@@ -297,19 +361,27 @@ try {
       const conversationIds = convRows.map((r) => r.conversation_id);
       console.log(`\nprobing ${conversationIds.length} archived conversation ids`);
 
-      // Batched and single-value forms are both tried: a criteria that only accepts one value would
-      // explain a query that succeeds and returns nothing.
-      for (const values of [conversationIds, conversationIds.slice(0, 1)]) {
+      // Three variants, because each failure mode returns 200 with an empty list and they are
+      // otherwise indistinguishable: operator casing (querycapabilities reports lowercase `eq`,
+      // and an unrecognised operator matching nothing looks exactly like absent data), and whether
+      // a multi-value list is honoured or only its first entry is.
+      const variants = [
+        { label: 'all ids, operator eq', values: conversationIds, operator: 'eq' },
+        { label: 'one id, operator eq', values: conversationIds.slice(0, 1), operator: 'eq' },
+        { label: 'one id, operator EQ', values: conversationIds.slice(0, 1), operator: 'EQ' },
+      ];
+
+      for (const { label, values, operator } of variants) {
         if (values.length === 0) continue;
         const res = await fetch(`https://${apiHost}/api/v2/flows/instances/query?pageSize=200`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            criteria: [{ criteriaKey: 'ConversationId', values, operator: 'EQ' }],
+            criteria: [{ criteriaKey: 'ConversationId', values, operator }],
           }),
         });
         const text = await res.text();
-        console.log(`\n${values.length} id(s): HTTP ${res.status}`);
+        console.log(`\n${label}: HTTP ${res.status}`);
         try {
           const body = JSON.parse(text);
           if (!res.ok) console.log('error body:', JSON.stringify(body).slice(0, 600));

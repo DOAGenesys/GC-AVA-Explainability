@@ -136,7 +136,13 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
               ) : (
                 <>
                   The fidelity pass runs every ten minutes and retrieves executions in batches of
-                  ten. If this session is recent, the trace should appear shortly.
+                  ten, so a recent session may simply not have been picked up yet.
+                  <br />
+                  <br />
+                  If no session ever gains a trace, the cause is upstream rather than here, and the
+                  coverage view lists what to check. Execution discovery is answered with an empty
+                  result rather than an error whether the data was never captured or the ingest
+                  credential simply cannot see it, so the two look identical from here.
                 </>
               )}
             </Empty>

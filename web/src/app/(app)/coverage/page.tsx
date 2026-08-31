@@ -107,6 +107,18 @@ export default async function CoveragePage() {
             </thead>
             <tbody>
               <tr>
+                <td>No session anywhere has a trace</td>
+                <td>
+                  Discovery returns an empty result rather than an error for every possible cause,
+                  so check them in order: execution data enabled under Admin → Organization Settings
+                  → Settings → Execution Data, no per-flow override turning it back off, the flow
+                  republished after it was enabled since capture is never backfilled, and the ingest
+                  credential holding Architect → Flow Instance → View and Search for the flow&apos;s
+                  division. A credential missing either permission is shown zero instances rather
+                  than being refused.
+                </td>
+              </tr>
+              <tr>
                 <td>A flow shows a persistently low full-trace rate</td>
                 <td>
                   Check the flow design for a missing exit path after the AVA response. An execution

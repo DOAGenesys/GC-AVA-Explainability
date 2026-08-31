@@ -550,7 +550,9 @@ export async function findExecutionIds(
       method: 'POST',
       query: { pageSize: 200 },
       body: {
-        criteria: [{ criteriaKey: 'ConversationId', values: chunk, operator: 'EQ' }],
+        // Lowercase `eq` is what querycapabilities reports for this criteria. The endpoint answers
+        // 200 either way, so a wrong operator would look exactly like an org with no execution data.
+        criteria: [{ criteriaKey: 'ConversationId', values: chunk, operator: 'eq' }],
       },
       identity,
       budget,
@@ -572,6 +574,20 @@ export async function findExecutionIds(
       });
       byConversation.set(entity.conversationId, list);
     }
+  }
+
+  // Asked-versus-matched is reported because this query answers 200 with an empty list for several
+  // unrelated reasons, and they need different responses. Nothing matched usually means the org
+  // never captured execution data. A partial match would instead suggest the batched criteria only
+  // honours some of its values, which would silently halve trace coverage.
+  const matched = byConversation.size;
+  if (conversationIds.length > 0 && matched === 0) {
+    logger.warn('ava.discovery.no_executions', {
+      asked: conversationIds.length,
+      hint: 'Execution data storage is off by default: Admin > Organization Settings > Settings > Execution Data, then republish the flows.',
+    });
+  } else if (matched < conversationIds.length) {
+    logger.info('ava.discovery.partial_match', { asked: conversationIds.length, matched });
   }
 
   return byConversation;
