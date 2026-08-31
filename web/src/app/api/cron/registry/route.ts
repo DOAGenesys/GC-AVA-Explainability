@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { toAppError } from '@/lib/errors';
 import { requireCronSecret } from '@/server/auth/guards';
 import { runRegistryPass } from '@/server/ingest';
+import { logger } from '@/server/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,5 +18,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   const result = await runRegistryPass();
+  logger.info('cron.registry.finished', {
+    ok: result.ok,
+    apiCalls: result.apiCalls,
+    summary: result.summary,
+  });
   return NextResponse.json(result, { status: result.ok ? 200 : 500 });
 }

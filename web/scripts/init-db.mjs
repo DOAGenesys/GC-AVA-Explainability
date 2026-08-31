@@ -16,24 +16,12 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 
+import { loadPostgresUrl, openDb } from './pg-client.mjs';
 import { splitSqlStatements } from './split-sql.mjs';
 
-const require = createRequire(import.meta.url);
-const { createClient, createPool } = require('@vercel/postgres');
-
-// An explicit POSTGRES_URL always wins, so the same script can target a deployed database without
-// having to keep its connection string in a local file.
-if (!process.env.POSTGRES_URL) {
-  try {
-    process.loadEnvFile(new URL('../.env.local', import.meta.url));
-  } catch {
-    // No .env.local: fall through to the check below, which explains both options.
-  }
-}
-
-if (!process.env.POSTGRES_URL) {
+const connectionString = loadPostgresUrl();
+if (!connectionString) {
   console.error(
     'POSTGRES_URL is not set. Add it to .env.local, or pass it inline to target a deployed database.',
   );
@@ -43,19 +31,7 @@ if (!process.env.POSTGRES_URL) {
 const schema = await readFile(new URL('../src/server/db/schema.sql', import.meta.url), 'utf8');
 const statements = splitSqlStatements(schema);
 
-const connectionString = process.env.POSTGRES_URL;
-
-/*
- * @vercel/postgres validates the connection string against the constructor: createClient() only
- * accepts a direct string (and only ever reads POSTGRES_URL_NON_POOLING from the environment),
- * while createPool() only accepts a pooled one. A Neon dashboard hands out the pooled string, so
- * pass it explicitly and pick the matching constructor rather than letting either default.
- */
-const isPooled = connectionString.includes('-pooler.');
-const db = isPooled ? createPool({ connectionString }) : createClient({ connectionString });
-
-// A pool connects lazily; a client has to be opened first.
-if (!isPooled) await db.connect();
+const { db, isPooled } = await openDb(connectionString);
 
 let applied = 0;
 try {

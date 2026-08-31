@@ -397,6 +397,22 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 | Everything 403                       | The ingestion client is missing one of the three permissions above.                                                                                                   |
 | Cron routes return 401               | `CRON_SECRET` mismatch between the environment and what Vercel sends.                                                                                                 |
 | Transcript coverage below 100%       | Ingestion fell behind the ten-day retention window. Anything past it is unrecoverable.                                                                                |
+| Sessions ingested but zero turns     | Run `npm run db:diagnose`. It separates "ingestion never ran" from "the platform returned no turns" from "we failed to parse them", which need different fixes.       |
+
+**Diagnosing empty data.** `npm run db:diagnose` is read-only and prints the evidence for each
+competing explanation: archive row counts, the last fifteen `ingest_runs` with their per-pass
+counters and errors, and — if the ingest credentials are supplied — a direct probe of the
+reporting-turns endpoint showing the HTTP status, how many entities came back, and whether those
+entities carry the fields needed to key them. Conversation content is never printed, only field
+names and counts, so the output is safe to share.
+
+```powershell
+$env:POSTGRES_URL='postgres://...'
+$env:GENESYS_INGEST_CLIENT_ID='...'      # optional, enables the live API probe
+$env:GENESYS_INGEST_CLIENT_SECRET='...'
+$env:GENESYS_REGION='mypurecloud.de'
+npm run db:diagnose
+```
 
 ## Limitations and known unknowns
 

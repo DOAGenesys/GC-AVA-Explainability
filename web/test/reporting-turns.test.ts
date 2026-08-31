@@ -26,10 +26,24 @@ describe('turnKey', () => {
     expect(turnKey(entity)).toBe(turnKey({ ...entity }));
   });
 
-  it('returns null when nothing can identify the turn', () => {
+  it('returns null when nothing can identify the turn, so the caller can synthesise a key', () => {
     expect(turnKey({ sequenceNumber: 1 })).toBeNull();
     expect(turnKey({ sessionId: 'sess-9' })).toBeNull();
     expect(turnKey({})).toBeNull();
+  });
+
+  // The analytics dimensions for this same data use botSessionId where the sessions endpoint uses
+  // sessionId, and the turn index has appeared as both sequenceNumber and turnNumber.
+  it('accepts the alternative identifier names the platform uses elsewhere', () => {
+    expect(turnKey({ botSessionId: 'bs-1', turnNumber: 2 })).toBe('bs-1:2');
+    expect(turnKey({ session: { id: 'nested-1' }, sequence: 5 })).toBe('nested-1:5');
+    expect(turnKey({ conversationId: 'conv-7', turnNumber: 0 })).toBe('conv-7:0');
+    expect(turnKey({ turnId: 'explicit-1' })).toBe('explicit-1');
+  });
+
+  it('ignores empty strings and non-finite numbers rather than keying on them', () => {
+    expect(turnKey({ sessionId: '', sequenceNumber: 1 })).toBeNull();
+    expect(turnKey({ sessionId: 'sess-9', sequenceNumber: Number.NaN })).toBeNull();
   });
 });
 

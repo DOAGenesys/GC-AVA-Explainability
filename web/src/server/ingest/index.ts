@@ -165,8 +165,7 @@ export async function runTriagePass(): Promise<PassResult> {
       if (sessions.length > 0) await upsertSessions(sessions);
       sessionsSeen += sessions.length;
 
-      // No interval: this endpoint has no date filter and always returns the retained window.
-      const turns = await getReportingTurns(flowId, INGESTION, budget);
+      const turns = await getReportingTurns(flowId, interval, INGESTION, budget);
       if (turns.length > 0) await upsertTurns(turns);
       turnsSeen += turns.length;
     }

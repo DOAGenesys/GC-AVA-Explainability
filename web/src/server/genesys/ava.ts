@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { createHash } from 'node:crypto';
 import { getServerConfig } from '../config';
 import { logger } from '../logger';
 import { genesysRequest, type ApiBudget, type Identity } from './http';
@@ -205,18 +206,62 @@ export interface ReportingTurn {
   raw: unknown;
 }
 
+/**
+ * A reporting turn as returned by the platform.
+ *
+ * The identifier fields are declared as alternatives rather than a single known name: this entity
+ * has no documented `id`, and the analytics dimensions for the same data use `botSessionId` where
+ * the session endpoint uses `sessionId`. The index signature keeps unrecognised fields accessible
+ * so an unexpected shape degrades into a fallback key instead of dropping the turn.
+ */
 export interface TurnEntity {
   id?: string;
+  turnId?: string;
   sessionId?: string;
-  botFlowId?: string;
+  botSessionId?: string;
+  session?: { id?: string };
+  conversationId?: string;
   conversation?: { id?: string };
   sequenceNumber?: number;
+  turnNumber?: number;
+  sequence?: number;
+  botFlowId?: string;
   askAction?: string;
   askActionResult?: string;
   userInput?: unknown;
   botPrompts?: unknown;
   turnStartTimestamp?: string;
   turnEndTimestamp?: string;
+  [key: string]: unknown;
+}
+
+function firstString(entity: TurnEntity, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = entity[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return null;
+}
+
+function firstNumber(entity: TurnEntity, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = entity[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+/**
+ * Deterministic last-resort key, derived from the turn's own content.
+ *
+ * Used only when no identifier can be found. Keys must be stable across passes or the archive would
+ * gain a duplicate on every run, so the entity is serialised with sorted keys before hashing. The
+ * trade-off is that a turn the platform later amends would land as a second row - acceptable,
+ * because the alternative is discarding data that no longer exists upstream after 10 days.
+ */
+function contentKey(entity: TurnEntity): string {
+  const canonical = JSON.stringify(entity, Object.keys(entity).sort());
+  return `sha256:${createHash('sha256').update(canonical).digest('hex').slice(0, 32)}`;
 }
 
 /**
@@ -227,10 +272,17 @@ export interface TurnEntity {
  * upsert and a fresh key on every pass would duplicate the whole transcript each run.
  */
 export function turnKey(entity: TurnEntity): string | null {
-  if (entity.id) return entity.id;
-  const owner = entity.sessionId ?? entity.conversation?.id;
-  if (!owner || entity.sequenceNumber === undefined) return null;
-  return `${owner}:${entity.sequenceNumber}`;
+  const explicit = firstString(entity, ['id', 'turnId']);
+  if (explicit) return explicit;
+
+  const owner =
+    firstString(entity, ['sessionId', 'botSessionId', 'conversationId']) ??
+    (typeof entity.session?.id === 'string' ? entity.session.id : null) ??
+    (typeof entity.conversation?.id === 'string' ? entity.conversation.id : null);
+
+  const sequence = firstNumber(entity, ['sequenceNumber', 'turnNumber', 'sequence']);
+  if (owner === null || sequence === null) return null;
+  return `${owner}:${sequence}`;
 }
 
 /** Pull the opaque `after` cursor out of the nextUri the platform hands back. */
@@ -245,26 +297,31 @@ export function cursorFromNextUri(nextUri: string | undefined): string | null {
 }
 
 /**
- * The per-turn transcript for a flow.
+ * The per-turn transcript for a flow, bounded by the ingestion window.
  *
- * Note the absence of an interval: this endpoint has no date filter and always returns whatever
- * utterance history is still within the platform's 10-day TTL. The ingestion lookback therefore
- * has no effect here, and the cost of this call grows with retained turn volume rather than with
- * the schedule - worth watching once a flow sustains thousands of turns per window.
+ * The window matters here beyond cost: without it the endpoint returns everything still inside the
+ * platform's 10-day TTL on every pass, so the call would get steadily more expensive as a flow
+ * accumulates turns rather than staying proportional to what is new.
  */
 export async function getReportingTurns(
   flowId: string,
+  interval: Interval,
   identity: Identity,
   budget: ApiBudget,
 ): Promise<ReportingTurn[]> {
   const turns: ReportingTurn[] = [];
   let after: string | null = null;
-  let unkeyable = 0;
+  let synthesised = 0;
+  let observedFields: string[] | null = null;
 
   for (let page = 0; page < 30; page += 1) {
     const res = await genesysRequest<{ entities?: TurnEntity[]; nextUri?: string }>({
       path: `/api/v2/analytics/botflows/${flowId}/reportingturns`,
-      query: { pageSize: 100, ...(after ? { after } : {}) },
+      query: {
+        interval: intervalParam(interval),
+        pageSize: 100,
+        ...(after ? { after } : {}),
+      },
       identity,
       budget,
       expectedStatuses: [404],
@@ -278,12 +335,17 @@ export async function getReportingTurns(
     }
 
     const entities = res.data.entities ?? [];
+
+    // Record the shape once, so an unrecognised entity is diagnosable from the logs without
+    // needing a live probe. Field names only - the values are conversation content.
+    if (entities[0] && observedFields === null) {
+      observedFields = Object.keys(entities[0]);
+    }
+
     for (const entity of entities) {
-      const turnId = turnKey(entity);
-      if (!turnId) {
-        unkeyable += 1;
-        continue;
-      }
+      const natural = turnKey(entity);
+      if (natural === null) synthesised += 1;
+      const turnId = natural ?? contentKey(entity);
       turns.push({
         turnId,
         sessionId: entity.sessionId ?? null,
@@ -305,8 +367,15 @@ export async function getReportingTurns(
     after = next;
   }
 
-  if (unkeyable > 0) {
-    logger.warn('ava.reportingturns.unkeyable_entities', { flowId, unkeyable, kept: turns.length });
+  // A synthesised key means no identifier field was recognised. The turn is still archived, but the
+  // observed field names are logged so the natural key can be restored properly.
+  if (synthesised > 0) {
+    logger.warn('ava.reportingturns.synthesised_keys', {
+      flowId,
+      synthesised,
+      kept: turns.length,
+      observedFields,
+    });
   }
 
   return turns;
