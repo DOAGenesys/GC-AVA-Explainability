@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Roboto } from 'next/font/google';
 import './globals.css';
+import './design-system.css';
 
 /**
  * Roboto is the Genesys brand typeface. Loaded through next/font so it is self-hosted at build

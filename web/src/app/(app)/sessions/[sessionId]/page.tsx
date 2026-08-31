@@ -1,8 +1,10 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { PageHeader } from '@/components/page-header';
+import { SessionTimelineView } from '@/components/session-timeline';
 import { TraceSummary, TraceTimeline } from '@/components/trace';
-import { Card, Empty, Pill, formatDateTime, outcomeTone } from '@/components/ui';
-import { getExecution, getSessionDetail, listTurnsForSession, type TurnRow } from '@/server/db';
+import { Card, Pill, formatDateTime, outcomeTone } from '@/components/ui';
+import { buildSessionTimeline } from '@/lib/session-timeline';
+import { getExecution, getSessionDetail, listTurnsForSession } from '@/server/db';
 import { parseTrace, type FlowExecutionTrace } from '@/server/genesys/ava';
 
 export const dynamic = 'force-dynamic';
@@ -26,190 +28,108 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
   ]);
 
   const trace = execution?.trace != null ? parseTrace(execution.trace as FlowExecutionTrace) : null;
+  const timeline = buildSessionTimeline(turns, trace);
 
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>{session.flowName ?? 'AVA session'}</h1>
-          <p>
+      <PageHeader
+        eyebrow="Session explainability"
+        title={session.flowName ?? 'AVA session'}
+        backHref="/sessions"
+        backLabel="All sessions"
+        description={
+          <div className="identifier-row">
             <span className="mono-id">{session.sessionId}</span>
             {session.conversationId ? (
               <>
-                {' · conversation '}
+                <span className="identifier-divider" aria-hidden="true" />
+                <span>Conversation</span>
                 <span className="mono-id">{session.conversationId}</span>
               </>
             ) : null}
-          </p>
-        </div>
-        <Link href="/sessions">Back to sessions</Link>
-      </header>
+          </div>
+        }
+      />
 
       <div className="stack">
-        <Card>
-          <div className="grid grid-kpi">
-            <div className="kpi">
-              <span className="kpi-label">Outcome</span>
-              <span style={{ marginTop: 6 }}>
-                <Pill tone={outcomeTone(session.botResultCategory)}>
-                  {session.botResult ?? 'Unknown'}
-                </Pill>
-              </span>
-              <span className="kpi-note">{session.botResultCategory ?? '—'}</span>
+        <section className="session-overview" aria-label="Session summary">
+          <div className="session-outcome">
+            <span className="kpi-label">Outcome</span>
+            <div>
+              <Pill tone={outcomeTone(session.botResultCategory)}>
+                {session.botResult ?? 'Unknown'}
+              </Pill>
             </div>
-            <div className="kpi">
-              <span className="kpi-label">Started</span>
-              <span className="kpi-note" style={{ fontSize: 14, marginTop: 8 }}>
-                {formatDateTime(session.dateCreated)}
-              </span>
-              <span className="kpi-note">Completed {formatDateTime(session.dateCompleted)}</span>
-            </div>
-            <div className="kpi">
-              <span className="kpi-label">Channel</span>
-              <span className="kpi-note" style={{ fontSize: 14, marginTop: 8 }}>
-                {session.channelName ?? '—'}
-              </span>
-              <span className="kpi-note">{session.language ?? '—'}</span>
-            </div>
-            <div className="kpi">
-              <span className="kpi-label">Turns</span>
-              <span className="kpi-value">{turns.length}</span>
-            </div>
+            <span className="kpi-note">{session.botResultCategory ?? 'Unclassified'}</span>
           </div>
-        </Card>
+          <div className="session-fact">
+            <span>Started</span>
+            <strong>{formatDateTime(session.dateCreated)}</strong>
+            <small>Completed {formatDateTime(session.dateCompleted)}</small>
+          </div>
+          <div className="session-fact">
+            <span>Channel</span>
+            <strong>{session.channelName ?? 'Unknown'}</strong>
+            <small>{session.language ?? 'Language unavailable'}</small>
+          </div>
+          <div className="session-fact">
+            <span>Conversation</span>
+            <strong>{turns.length} reporting turns</strong>
+            <small>{trace ? `${trace.toolCalls.length} tool calls` : 'Transcript fidelity'}</small>
+          </div>
+        </section>
 
         <Card
-          title="Transcript"
-          subtitle="From bot flow reporting turns, captured before the platform's 10-day retention expires"
+          title="Conversation"
+          subtitle="Messages and the tools they triggered, in one evidence-aligned timeline"
+          action={
+            <Pill tone={trace ? (trace.truncated ? 'warn' : 'good') : 'neutral'}>
+              {trace ? (trace.truncated ? 'Partial trace' : 'Full trace') : 'Transcript only'}
+            </Pill>
+          }
         >
-          {turns.length > 0 ? (
-            <div className="transcript">
-              {turns.map((turn, index) => (
-                <TurnBubbles key={turn.turnId} turn={turn} position={index + 1} />
-              ))}
+          <SessionTimelineView timeline={timeline} />
+
+          {!trace && execution?.retrievalStatus === 'NO_HISTORY' ? (
+            <div className="timeline-footnote">
+              <strong>Why tool detail is unavailable:</strong> this execution did not reach its
+              flow&apos;s exit, so Genesys permanently returns no execution history
+              {execution.jobsStatusCode ? ` (status ${execution.jobsStatusCode})` : ''}.
             </div>
-          ) : (
-            <Empty title="No turns captured for this session">
-              Turn data is retained upstream for 10 days. If this session is older than that and was
-              never ingested, the transcript no longer exists anywhere.
-            </Empty>
-          )}
-        </Card>
+          ) : null}
 
-        {trace ? (
-          <>
-            <Card title="Execution trace" subtitle="Full fidelity, retrieved via the Jobs API">
-              <TraceSummary trace={trace} />
-              {trace.truncated ? (
-                <div className="callout alert" style={{ marginTop: 14 }}>
-                  <strong>This trace is truncated.</strong>
-                  The platform marked the execution history as incomplete, so items are missing from
-                  the timeline below. Treat any absence as unknown rather than as evidence that
-                  something did not happen.
+          {trace ? (
+            <details className="flow-trace-disclosure">
+              <summary>
+                <span>
+                  <strong>Flow execution details</strong>
+                  <small>Inspect states, waits, transitions, and raw action evidence</small>
+                </span>
+                <span className="summary-action">
+                  {trace.items.length} events
+                  <span className="disclosure-icon" aria-hidden="true">
+                    +
+                  </span>
+                </span>
+              </summary>
+              <div className="flow-trace-body">
+                <TraceSummary trace={trace} />
+                {trace.truncated ? (
+                  <div className="timeline-notice is-warning">
+                    <strong>This trace is truncated.</strong>
+                    Treat any missing item as unknown rather than evidence that it did not happen.
+                  </div>
+                ) : null}
+                <div className="trace-section-head">
+                  <span className="page-eyebrow">Ordered flow timeline</span>
+                  <p>Tool calls remain expanded with their recorded inputs and outputs.</p>
                 </div>
-              ) : null}
-            </Card>
-
-            <Card
-              title="What the AVA did"
-              subtitle="Ordered timeline; tool calls expanded with the inputs chosen and the outputs returned"
-            >
-              <TraceTimeline trace={trace} />
-            </Card>
-          </>
-        ) : (
-          <Card title="Execution trace">
-            <Empty
-              title={
-                execution?.retrievalStatus === 'NO_HISTORY'
-                  ? 'Genesys holds no execution history for this conversation'
-                  : 'No execution trace yet'
-              }
-            >
-              {execution?.retrievalStatus === 'NO_HISTORY' ? (
-                <>
-                  Execution history only exists for executions that reach their flow&apos;s exit.
-                  This one did not, so the Jobs API answers 404 for it permanently
-                  {execution.jobsStatusCode ? ` (status ${execution.jobsStatusCode})` : ''}. The
-                  transcript above is the complete record of this conversation.
-                </>
-              ) : (
-                <>
-                  The fidelity pass runs every ten minutes and retrieves executions in batches of
-                  ten, so a recent session may simply not have been picked up yet.
-                  <br />
-                  <br />
-                  If no session ever gains a trace, the cause is upstream rather than here, and the
-                  coverage view lists what to check. Execution discovery is answered with an empty
-                  result rather than an error whether the data was never captured or the ingest
-                  credential simply cannot see it, so the two look identical from here.
-                </>
-              )}
-            </Empty>
-          </Card>
-        )}
+                <TraceTimeline trace={trace} />
+              </div>
+            </details>
+          ) : null}
+        </Card>
       </div>
     </>
   );
-}
-
-/**
- * Render one reporting turn as the exchange it represents.
- *
- * Both sides are defensive about shape because the platform returns the utterance under different
- * keys depending on channel and input mode, and the turn-level metadata fields are still changing.
- */
-function TurnBubbles({ turn, position }: { turn: TurnRow; position: number }) {
-  const user = extractText(turn.userInput);
-  const bot = extractText(turn.botPrompts);
-
-  // The platform sends no turn number, so the label is the turn's position in the ordered
-  // transcript. Showing that is honest and useful; showing "turn ?" was neither.
-  const label = turn.sequence ?? position;
-
-  return (
-    <>
-      {user ? (
-        <div className="bubble user">
-          <div className="bubble-meta">Customer · turn {label}</div>
-          {user}
-        </div>
-      ) : null}
-      {bot ? (
-        <div className="bubble bot">
-          <div className="bubble-meta">
-            AVA
-            {turn.askAction ? ` · ${turn.askAction}` : ''}
-            {turn.askActionResult ? ` · ${turn.askActionResult}` : ''}
-          </div>
-          {bot}
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-function extractText(value: unknown): string | null {
-  if (value == null) return null;
-  if (typeof value === 'string') return value.trim() || null;
-
-  if (Array.isArray(value)) {
-    const parts = value.map(extractText).filter((v): v is string => Boolean(v));
-    return parts.length > 0 ? parts.join('\n') : null;
-  }
-
-  if (typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    for (const key of ['text', 'utterance', 'value', 'message', 'body']) {
-      const candidate = extractText(record[key]);
-      if (candidate) return candidate;
-    }
-    // Nothing recognisable: fall through to the nested collections the API commonly uses.
-    for (const key of ['prompts', 'messages', 'inputs', 'segments']) {
-      const candidate = extractText(record[key]);
-      if (candidate) return candidate;
-    }
-  }
-
-  return null;
 }

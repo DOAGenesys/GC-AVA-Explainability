@@ -41,6 +41,20 @@ const GENESYS_LOGIN_ORIGINS = [
   'https://*.mypurecloud.jp',
 ];
 
+/**
+ * The live-events page connects directly to the opaque `connectUri` returned by the authenticated
+ * Notifications API. All regional streaming hosts are listed because the user's region is stored
+ * in an encrypted HttpOnly cookie and is intentionally unavailable to this edge middleware.
+ */
+const GENESYS_STREAMING_ORIGINS = [
+  'wss://*.pure.cloud',
+  'wss://*.mypurecloud.com',
+  'wss://*.mypurecloud.de',
+  'wss://*.mypurecloud.ie',
+  'wss://*.mypurecloud.com.au',
+  'wss://*.mypurecloud.jp',
+];
+
 function buildCsp(nonce: string, isProd: boolean, isSignIn: boolean): string {
   const scriptSrc = [`'self'`, `'nonce-${nonce}'`, `'strict-dynamic'`];
   if (!isProd) scriptSrc.push(`'unsafe-eval'`); // React Fast Refresh in dev only.
@@ -53,7 +67,7 @@ function buildCsp(nonce: string, isProd: boolean, isSignIn: boolean): string {
     'img-src': [`'self'`, 'data:', 'blob:'],
     // next/font self-hosts Roboto at build time, so no external font origin is needed.
     'font-src': [`'self'`],
-    'connect-src': [`'self'`],
+    'connect-src': [`'self'`, ...GENESYS_STREAMING_ORIGINS],
     'worker-src': [`'self'`, 'blob:'],
     'object-src': [`'none'`],
     'base-uri': [`'self'`],

@@ -15,6 +15,7 @@ export const ERROR_CODES = [
   'GENESYS_NOT_CONFIGURED',
   'GENESYS_AUTH_FAILED',
   'GENESYS_PERMISSION_DENIED',
+  'GENESYS_NOTIFICATION_PERMISSION_DENIED',
   // Ingestion
   'INGEST_NOT_AUTHORIZED',
   'INGEST_FAILED',
@@ -96,6 +97,15 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     message: 'Your Genesys user does not have permission for this operation.',
     nextAction:
       'Ask an administrator for architect:flow:view, architect:flowInstance:view and analytics:botFlowReportingTurn:view.',
+    httpStatus: 403,
+  },
+  GENESYS_NOTIFICATION_PERMISSION_DENIED: {
+    code: 'GENESYS_NOTIFICATION_PERMISSION_DENIED',
+    severity: 'error',
+    retryable: false,
+    message: 'Genesys denied access to real-time notifications.',
+    nextAction:
+      'Grant the signed-in user Notifications subscription and topic-specific access, ensure the Code Authorization client permits it, then sign in again.',
     httpStatus: 403,
   },
   INGEST_NOT_AUTHORIZED: {

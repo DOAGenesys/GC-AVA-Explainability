@@ -122,8 +122,9 @@ the aggregate shows how widespread it is.
 - **It does not claim completeness it cannot deliver.** Coverage gaps are surfaced, not smoothed.
 - **It does not replace Architect's execution history viewer** for single-flow debugging. It adds
   the cross-conversation, cross-flow, durable-archive view that Architect does not offer.
-- **It does not stream in real time.** Ingestion is on a ten-minute cadence, which is a deliberate
-  cost trade-off explained below.
+- **Its durable archive does not ingest in real time.** Ingestion is on a ten-minute cadence, which
+  is a deliberate cost trade-off explained below. The **Live events** page is a browser-only
+  diagnostic stream: it neither persists events nor replaces the archive.
 
 ---
 
@@ -187,6 +188,21 @@ state in the schema: re-asking costs API budget to learn nothing.
 
 Deliberately unused: `GET /flows/instances/{id}`. It creates a job internally, so it costs a job
 while carrying a single execution — strictly worse than batching.
+
+### Live notification diagnostics
+
+The **Live events** page creates one authenticated Notifications API channel, then subscribes over
+the returned WebSocket. Users can combine three parameterized topics:
+
+- `v2.detail.events.conversation.{id}.flow.end`
+- `v2.flows.instances.flow.{id}`
+- `v2.flows.{id}`
+
+WebSocket topics do not accept wildcards, so the page requires a concrete conversation or flow id
+before it starts. Channel creation costs one Platform API call; received events do not poll the
+API. The OAuth token remains in its encrypted HttpOnly cookie, while the browser receives only the
+opaque Genesys `connectUri`. Events are kept in a 500-entry in-memory buffer and can be copied by
+field, selected JSON fragment, individual envelope, or complete visible output.
 
 ### Three traps in the discovery contract
 

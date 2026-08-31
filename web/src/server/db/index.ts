@@ -103,6 +103,27 @@ export async function listIngestableFlowIds(explicit: string[]): Promise<string[
   return rows.map((r) => r.flow_id);
 }
 
+export interface AvaFlowOption {
+  flowId: string;
+  name: string;
+  flowType: string | null;
+}
+
+/** Known AVA flows offered as suggestions without preventing a user from pasting any flow id. */
+export async function listAvaFlowOptions(): Promise<AvaFlowOption[]> {
+  const { rows } = await sql<{ flow_id: string; name: string; flow_type: string | null }>`
+    SELECT flow_id, name, flow_type
+    FROM ava_flows
+    WHERE ava_enabled
+    ORDER BY name, flow_id
+  `;
+  return rows.map((row) => ({
+    flowId: row.flow_id,
+    name: row.name,
+    flowType: row.flow_type,
+  }));
+}
+
 export async function upsertSessions(sessions: BotFlowSession[]): Promise<void> {
   for (const s of sessions) {
     await sql`
@@ -761,6 +782,7 @@ export interface TurnRow {
   userInput: unknown;
   botPrompts: unknown;
   turnStart: string | null;
+  turnEnd: string | null;
 }
 
 export async function listTurnsForSession(sessionId: string): Promise<TurnRow[]> {
@@ -772,8 +794,10 @@ export async function listTurnsForSession(sessionId: string): Promise<TurnRow[]>
     user_input: unknown;
     bot_prompts: unknown;
     turn_start: string | null;
+    turn_end: string | null;
   }>`
-    SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts, turn_start
+    SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts,
+           turn_start, turn_end
     FROM ava_turns WHERE session_id = ${sessionId}
     ORDER BY sequence_number NULLS LAST, turn_start NULLS LAST, turn_id
   `;
@@ -785,6 +809,7 @@ export async function listTurnsForSession(sessionId: string): Promise<TurnRow[]>
     userInput: r.user_input,
     botPrompts: r.bot_prompts,
     turnStart: r.turn_start,
+    turnEnd: r.turn_end,
   }));
 }
 
@@ -797,8 +822,10 @@ export async function listTurnsForConversation(conversationId: string): Promise<
     user_input: unknown;
     bot_prompts: unknown;
     turn_start: string | null;
+    turn_end: string | null;
   }>`
-    SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts, turn_start
+    SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts,
+           turn_start, turn_end
     FROM ava_turns WHERE conversation_id = ${conversationId}
     ORDER BY sequence_number NULLS LAST, turn_start NULLS LAST, turn_id
   `;
@@ -810,5 +837,6 @@ export async function listTurnsForConversation(conversationId: string): Promise<
     userInput: r.user_input,
     botPrompts: r.bot_prompts,
     turnStart: r.turn_start,
+    turnEnd: r.turn_end,
   }));
 }

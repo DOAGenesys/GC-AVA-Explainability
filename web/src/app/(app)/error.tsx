@@ -1,6 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui';
+import { PageHeader } from '@/components/page-header';
 
 /**
  * Route-level error boundary for the authenticated app.
@@ -18,35 +19,36 @@ export default function AppError({
   reset: () => void;
 }) {
   return (
-    <>
-      <header className="page-head">
-        <div>
-          <h1>Something failed on the server</h1>
-          <p>This page could not be rendered. The rest of the app is unaffected.</p>
-        </div>
-      </header>
-      <Card title="Most likely causes">
-        <ul className="checklist">
-          <li>
-            The database schema has not been applied yet - run <code>npm run db:init</code> against
-            this database.
-          </li>
-          <li>
-            <code>POSTGRES_URL</code> is missing on this environment, or the database is paused.
-          </li>
-          <li>A transient connection failure, which usually clears on retry.</li>
-        </ul>
-        {error.digest ? (
-          <p className="hint">
-            Quote this digest when checking the runtime logs: <code>{error.digest}</code>
+    <div className="state-page">
+      <PageHeader
+        eyebrow="Render error"
+        title="Something failed on the server"
+        description="This page could not be rendered. The rest of the app is unaffected."
+      />
+      <div className="state-card">
+        <Card title="Most likely causes">
+          <ul className="checklist">
+            <li>
+              The database schema has not been applied yet - run <code>npm run db:init</code>{' '}
+              against this database.
+            </li>
+            <li>
+              <code>POSTGRES_URL</code> is missing on this environment, or the database is paused.
+            </li>
+            <li>A transient connection failure, which usually clears on retry.</li>
+          </ul>
+          {error.digest ? (
+            <p className="hint">
+              Quote this digest when checking the runtime logs: <code>{error.digest}</code>
+            </p>
+          ) : null}
+          <p className="error-actions">
+            <button className="btn-primary" type="button" onClick={reset}>
+              Try again
+            </button>
           </p>
-        ) : null}
-        <p className="error-actions">
-          <button className="btn-primary" type="button" onClick={reset}>
-            Try again
-          </button>
-        </p>
-      </Card>
-    </>
+        </Card>
+      </div>
+    </div>
   );
 }

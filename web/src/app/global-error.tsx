@@ -18,28 +18,32 @@ export default function GlobalError({
   return (
     <html lang="en">
       <body>
-        <main
-          style={{
-            maxWidth: 560,
-            margin: '18vh auto',
-            padding: '0 24px',
-            fontFamily: 'var(--sans, system-ui, sans-serif)',
-          }}
-        >
-          <h1 style={{ fontSize: 22, marginBottom: 10 }}>The application failed to start</h1>
-          <p style={{ color: 'var(--ink-muted, #55636f)', lineHeight: 1.55, marginBottom: 18 }}>
-            This usually means a required environment variable is missing or malformed, so the app
-            could not be constructed at all. Verify <code>APP_SESSION_SECRET</code>,{' '}
-            <code>GENESYS_REGION</code> and <code>POSTGRES_URL</code> on this environment.
-          </p>
-          {error.digest ? (
-            <p style={{ color: 'var(--ink-muted, #55636f)', fontSize: 13, marginBottom: 18 }}>
-              Log digest: <code>{error.digest}</code>
+        <main className="login-wrap global-error-wrap">
+          <section className="login-card global-error-card">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/images/brand/genesys-logo.svg"
+              alt="Genesys"
+              className="brand-logo"
+              width={160}
+              height={30}
+            />
+            <span className="state-code">Application error</span>
+            <h1>The application failed to start</h1>
+            <p className="login-lede">
+              A required environment variable may be missing or malformed. Verify{' '}
+              <code>APP_SESSION_SECRET</code>, <code>GENESYS_REGION</code> and{' '}
+              <code>POSTGRES_URL</code> for this environment.
             </p>
-          ) : null}
-          <button className="btn-primary" type="button" onClick={reset}>
-            Reload
-          </button>
+            {error.digest ? (
+              <p className="hint">
+                Log digest: <code>{error.digest}</code>
+              </p>
+            ) : null}
+            <button className="btn-primary" type="button" onClick={reset}>
+              Reload application
+            </button>
+          </section>
         </main>
       </body>
     </html>

@@ -50,8 +50,9 @@ function toneFor(category: string): string {
 }
 
 export function OutcomeDonut({ data }: { data: { category: string; count: number }[] }) {
+  const summary = data.map((item) => `${item.category}: ${item.count}`).join(', ');
   return (
-    <div className="chart-wrap">
+    <div className="chart-wrap" role="img" aria-label={`Session outcomes. ${summary}`}>
       <ResponsiveContainer>
         <PieChart>
           <Pie
@@ -87,8 +88,16 @@ export function ToolBars({
 }: {
   data: { toolName: string; calls: number; failures: number }[];
 }) {
+  const summary = data
+    .map((item) => `${item.toolName}: ${item.calls} calls, ${item.failures} failures`)
+    .join(', ');
   return (
-    <div className="chart-wrap" style={{ height: Math.max(200, data.length * 42) }}>
+    <div
+      className="chart-wrap"
+      style={{ height: Math.max(200, data.length * 42) }}
+      role="img"
+      aria-label={`Tool call volume and failures. ${summary}`}
+    >
       <ResponsiveContainer>
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 22 }} barSize={16}>
           <CartesianGrid stroke={GRID} horizontal={false} />
@@ -113,8 +122,19 @@ export function LatencyBars({
 }: {
   data: { toolName: string; p50LatencyMs: number | null; p95LatencyMs: number | null }[];
 }) {
+  const summary = data
+    .map(
+      (item) =>
+        `${item.toolName}: median ${item.p50LatencyMs ?? 'unknown'} milliseconds, 95th percentile ${item.p95LatencyMs ?? 'unknown'} milliseconds`,
+    )
+    .join(', ');
   return (
-    <div className="chart-wrap" style={{ height: Math.max(200, data.length * 42) }}>
+    <div
+      className="chart-wrap"
+      style={{ height: Math.max(200, data.length * 42) }}
+      role="img"
+      aria-label={`Tool latency. ${summary}`}
+    >
       <ResponsiveContainer>
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 22 }} barSize={16}>
           <CartesianGrid stroke={GRID} horizontal={false} />
@@ -153,9 +173,20 @@ export function CoverageBars({
     // trace will ever explain.
     withoutExecution: row.sessions - row.withExecution,
   }));
+  const summary = shaped
+    .map(
+      (item) =>
+        `${item.category}: ${item.withExecution} full traces, ${item.withoutExecution} analytics only`,
+    )
+    .join(', ');
 
   return (
-    <div className="chart-wrap" style={{ height: Math.max(220, shaped.length * 46) }}>
+    <div
+      className="chart-wrap"
+      style={{ height: Math.max(220, shaped.length * 46) }}
+      role="img"
+      aria-label={`Execution coverage by outcome. ${summary}`}
+    >
       <ResponsiveContainer>
         <BarChart data={shaped} layout="vertical" margin={{ left: 8, right: 22 }} barSize={20}>
           <CartesianGrid stroke={GRID} horizontal={false} />
@@ -192,8 +223,14 @@ export function BudgetLine({
 }: {
   data: { at: string; apiCalls: number; perExecution: number | null }[];
 }) {
+  const summary = data
+    .map(
+      (item) =>
+        `${item.at}: ${item.apiCalls} API calls${item.perExecution == null ? '' : `, ${item.perExecution} per execution`}`,
+    )
+    .join(', ');
   return (
-    <div className="chart-wrap">
+    <div className="chart-wrap" role="img" aria-label={`API budget over time. ${summary}`}>
       <ResponsiveContainer>
         <LineChart data={data} margin={{ left: 4, right: 18, top: 8 }}>
           <CartesianGrid stroke={GRID} />

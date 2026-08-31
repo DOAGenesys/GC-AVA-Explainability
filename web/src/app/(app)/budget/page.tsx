@@ -1,4 +1,6 @@
 import { BudgetLine } from '@/components/charts';
+import { DataTable } from '@/components/data-table';
+import { PageHeader } from '@/components/page-header';
 import { Card, Empty, Kpi, Pill, formatDateTime, formatMs } from '@/components/ui';
 import { listIngestRuns } from '@/server/db';
 
@@ -45,16 +47,17 @@ export default async function BudgetPage() {
 
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>API budget</h1>
-          <p>
+      <PageHeader
+        eyebrow="Assurance"
+        title="API budget"
+        description={
+          <>
             Ingestion cost, measured continuously. Content downloads are excluded on purpose: job
             payloads are served from the region&apos;s download host rather than the Platform API,
             so the bytes do not consume the API allowance. Only the calls counted here do.
-          </p>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="stack">
         <div className="grid grid-kpi">
@@ -111,40 +114,52 @@ export default async function BudgetPage() {
 
         <Card title="Ingestion history" subtitle="Newest first">
           {runs.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>Started</th>
-                  <th>Pass</th>
-                  <th>Status</th>
-                  <th className="num">Duration</th>
-                  <th className="num">API calls</th>
-                  <th className="num">Retrieved</th>
-                  <th className="num">No history</th>
-                  <th className="num">Calls / exec</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.slice(0, 60).map((run) => (
-                  <tr key={run.id}>
-                    <td>{formatDateTime(run.startedAt)}</td>
-                    <td>{run.kind}</td>
-                    <td>
-                      {run.ok ? (
-                        <Pill tone="good">OK</Pill>
-                      ) : (
-                        <Pill tone="bad">{run.error?.slice(0, 60) ?? 'Failed'}</Pill>
-                      )}
-                    </td>
-                    <td className="num">{formatMs(run.durationMs)}</td>
-                    <td className="num">{run.apiCalls}</td>
-                    <td className="num">{run.executionsRetrieved || '—'}</td>
-                    <td className="num">{run.executionsNoHistory || '—'}</td>
-                    <td className="num">{run.apiCallsPerExecution?.toFixed(3) ?? '—'}</td>
+            <DataTable label="Ingestion run history">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Started</th>
+                    <th scope="col">Pass</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className="num">
+                      Duration
+                    </th>
+                    <th scope="col" className="num">
+                      API calls
+                    </th>
+                    <th scope="col" className="num">
+                      Retrieved
+                    </th>
+                    <th scope="col" className="num">
+                      No history
+                    </th>
+                    <th scope="col" className="num">
+                      Calls / exec
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {runs.slice(0, 60).map((run) => (
+                    <tr key={run.id}>
+                      <td>{formatDateTime(run.startedAt)}</td>
+                      <td>{run.kind}</td>
+                      <td>
+                        {run.ok ? (
+                          <Pill tone="good">OK</Pill>
+                        ) : (
+                          <Pill tone="bad">{run.error?.slice(0, 60) ?? 'Failed'}</Pill>
+                        )}
+                      </td>
+                      <td className="num">{formatMs(run.durationMs)}</td>
+                      <td className="num">{run.apiCalls}</td>
+                      <td className="num">{run.executionsRetrieved || '—'}</td>
+                      <td className="num">{run.executionsNoHistory || '—'}</td>
+                      <td className="num">{run.apiCallsPerExecution?.toFixed(3) ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </DataTable>
           ) : (
             <Empty title="No ingestion has run yet">
               Vercel Cron invokes the three passes on schedule. Confirm CRON_SECRET is set and the

@@ -1,5 +1,8 @@
 import Link from 'next/link';
 import { OutcomeDonut, ToolBars } from '@/components/charts';
+import { DataTable } from '@/components/data-table';
+import { PageHeader } from '@/components/page-header';
+import { RefreshDataButton } from '@/components/refresh-data-button';
 import {
   Card,
   Empty,
@@ -43,17 +46,19 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>AVA observability</h1>
-          <p>
+      <PageHeader
+        eyebrow="Overview"
+        title="AVA observability"
+        description={
+          <>
             Last {WINDOW_DAYS} days. Session outcomes and turn transcripts come from bot flow
             analytics; the tool-level detail comes from full execution history retrieved in batches
             of ten. The two do not cover the same conversations, which is what the coverage view is
             for.
-          </p>
-        </div>
-      </header>
+          </>
+        }
+        action={<RefreshDataButton />}
+      />
 
       <div className="stack">
         <div className="grid grid-kpi">
@@ -112,8 +117,8 @@ export default async function DashboardPage() {
               <OutcomeDonut data={outcomes} />
             ) : (
               <Empty title="No sessions yet">
-                The triage pass runs every ten minutes and will populate this once an AVA flow
-                handles a conversation.
+                The triage pass runs every ten minutes, or use Fetch latest data above to run it
+                now.
               </Empty>
             )}
           </Card>
@@ -127,7 +132,8 @@ export default async function DashboardPage() {
             ) : (
               <Empty title="No tool calls recorded">
                 Tool detail only exists inside execution history, so it appears once the fidelity
-                pass retrieves an execution that reached its flow&apos;s exit.
+                pass retrieves an execution that reached its flow&apos;s exit. Fetch latest data
+                runs that pass immediately after refreshing sessions and turns.
               </Empty>
             )}
           </Card>
@@ -139,46 +145,52 @@ export default async function DashboardPage() {
           action={<Link href="/sessions">View all</Link>}
         >
           {sessions.length > 0 ? (
-            <table>
-              <thead>
-                <tr>
-                  <th>Started</th>
-                  <th>Flow</th>
-                  <th>Outcome</th>
-                  <th className="num">Turns</th>
-                  <th className="num">Tools</th>
-                  <th>Trace</th>
-                  <th>Session</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map((session) => (
-                  <tr key={session.sessionId}>
-                    <td>{formatDateTime(session.dateCreated)}</td>
-                    <td>{session.flowName ?? <ShortId id={session.flowId} />}</td>
-                    <td>
-                      <Pill tone={outcomeTone(session.botResultCategory)}>
-                        {session.botResult ?? 'Unknown'}
-                      </Pill>
-                    </td>
-                    <td className="num">{session.turnCount}</td>
-                    <td className="num">{session.toolCallCount || '—'}</td>
-                    <td>
-                      {session.executionId ? (
-                        <Pill tone={retrievalTone(session.retrievalStatus)}>
-                          {session.retrievalStatus === 'ARCHIVED' ? 'Full' : 'Analytics only'}
-                        </Pill>
-                      ) : (
-                        <Pill tone="neutral">Pending</Pill>
-                      )}
-                    </td>
-                    <td>
-                      <ShortId id={session.sessionId} href={`/sessions/${session.sessionId}`} />
-                    </td>
+            <DataTable label="Recent AVA sessions">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Started</th>
+                    <th scope="col">Flow</th>
+                    <th scope="col">Outcome</th>
+                    <th scope="col" className="num">
+                      Turns
+                    </th>
+                    <th scope="col" className="num">
+                      Tools
+                    </th>
+                    <th scope="col">Trace</th>
+                    <th scope="col">Session</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sessions.map((session) => (
+                    <tr key={session.sessionId}>
+                      <td>{formatDateTime(session.dateCreated)}</td>
+                      <td>{session.flowName ?? <ShortId id={session.flowId} />}</td>
+                      <td>
+                        <Pill tone={outcomeTone(session.botResultCategory)}>
+                          {session.botResult ?? 'Unknown'}
+                        </Pill>
+                      </td>
+                      <td className="num">{session.turnCount}</td>
+                      <td className="num">{session.toolCallCount || '—'}</td>
+                      <td>
+                        {session.executionId ? (
+                          <Pill tone={retrievalTone(session.retrievalStatus)}>
+                            {session.retrievalStatus === 'ARCHIVED' ? 'Full' : 'Analytics only'}
+                          </Pill>
+                        ) : (
+                          <Pill tone="neutral">Pending</Pill>
+                        )}
+                      </td>
+                      <td>
+                        <ShortId id={session.sessionId} href={`/sessions/${session.sessionId}`} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </DataTable>
           ) : (
             <Empty title="Nothing ingested yet">
               Confirm the cron jobs are running on the API budget view.
@@ -193,32 +205,33 @@ export default async function DashboardPage() {
 function NotConfigured({ missing }: { missing: string[] }) {
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>Finish setup</h1>
-          <p>The app is deployed but cannot ingest or display anything yet.</p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Configuration"
+        title="Finish setup"
+        description="The app is deployed but cannot ingest or display anything yet."
+      />
       <Card title="Missing configuration">
         {missing.length > 0 ? (
-          <table>
-            <thead>
-              <tr>
-                <th>Environment variable</th>
-                <th>Needed for</th>
-              </tr>
-            </thead>
-            <tbody>
-              {missing.map((key) => (
-                <tr key={key}>
-                  <td>
-                    <code>{key}</code>
-                  </td>
-                  <td>{PURPOSE[key] ?? 'Application configuration'}</td>
+          <DataTable label="Missing environment variables">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Environment variable</th>
+                  <th scope="col">Needed for</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {missing.map((key) => (
+                  <tr key={key}>
+                    <td>
+                      <code>{key}</code>
+                    </td>
+                    <td>{PURPOSE[key] ?? 'Application configuration'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </DataTable>
         ) : (
           <Empty title="Nothing missing">Configuration looks complete.</Empty>
         )}
@@ -230,15 +243,16 @@ function NotConfigured({ missing }: { missing: string[] }) {
 function SchemaMissing({ missing }: { missing: string[] }) {
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>Apply the database schema</h1>
-          <p>
+      <PageHeader
+        eyebrow="Database setup"
+        title="Apply the database schema"
+        description={
+          <>
             Postgres is connected but the observability tables have not been created yet, so there
             is nothing to read from. This is a one-off step per database.
-          </p>
-        </div>
-      </header>
+          </>
+        }
+      />
       <Card title="Run this once" subtitle="From the web directory, against this database">
         <pre className="code-block">
           <code>{'POSTGRES_URL="<this deployment\u2019s connection string>" npm run db:init'}</code>
@@ -249,22 +263,24 @@ function SchemaMissing({ missing }: { missing: string[] }) {
         </p>
       </Card>
       <Card title="Missing tables">
-        <table>
-          <thead>
-            <tr>
-              <th>Table</th>
-            </tr>
-          </thead>
-          <tbody>
-            {missing.map((table) => (
-              <tr key={table}>
-                <td>
-                  <code>{table}</code>
-                </td>
+        <DataTable label="Missing database tables">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Table</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {missing.map((table) => (
+                <tr key={table}>
+                  <td>
+                    <code>{table}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </DataTable>
       </Card>
     </>
   );
@@ -273,12 +289,11 @@ function SchemaMissing({ missing }: { missing: string[] }) {
 function DatabaseUnreachable() {
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>Database unreachable</h1>
-          <p>The app is configured but could not open a connection to Postgres.</p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Connection issue"
+        title="Database unreachable"
+        description="The app is configured but could not open a connection to Postgres."
+      />
       <Card title="What to check">
         <ul className="checklist">
           <li>

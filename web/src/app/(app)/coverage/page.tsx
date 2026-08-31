@@ -1,4 +1,6 @@
 import { CoverageBars } from '@/components/charts';
+import { DataTable } from '@/components/data-table';
+import { PageHeader } from '@/components/page-header';
 import { Card, Empty, Kpi, formatPercent } from '@/components/ui';
 import { getCoverageReport } from '@/server/db';
 
@@ -24,17 +26,18 @@ export default async function CoveragePage() {
 
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>Coverage</h1>
-          <p>
+      <PageHeader
+        eyebrow="Assurance"
+        title="Coverage"
+        description={
+          <>
             How much of what the AVA actually did is visible, and at what fidelity. The gap is not a
             defect in the ingestion - it is a property of the platform, and it is why the cheap
             analytics endpoints are the spine of this archive rather than an optimisation on top of
             execution history.
-          </p>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="stack">
         <div className="grid grid-kpi">
@@ -83,11 +86,11 @@ export default async function CoveragePage() {
               <CoverageBars data={report.byCategory} />
               <div className="legend">
                 <span>
-                  <i className="swatch" style={{ background: '#18caa8' }} /> Full trace: transcript
+                  <i className="swatch swatch-good" aria-hidden="true" /> Full trace: transcript
                   plus tool-level execution history
                 </span>
                 <span>
-                  <i className="swatch" style={{ background: '#ff451a' }} /> Analytics only:
+                  <i className="swatch swatch-alert" aria-hidden="true" /> Analytics only:
                   transcript and outcome, no tool detail
                 </span>
               </div>
@@ -98,51 +101,54 @@ export default async function CoveragePage() {
         </Card>
 
         <Card title="What to do about the gap">
-          <table>
-            <thead>
-              <tr>
-                <th>Observation</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>No session anywhere has a trace</td>
-                <td>
-                  Discovery returns an empty result rather than an error for every possible cause,
-                  so check them in order: execution data enabled under Admin → Organization Settings
-                  → Settings → Execution Data, no per-flow override turning it back off, the flow
-                  republished after it was enabled since capture is never backfilled, and the ingest
-                  credential holding Architect → Flow Instance → View and Search for the flow&apos;s
-                  division. A credential missing either permission is shown zero instances rather
-                  than being refused. Confirm the query itself still works before concluding any of
-                  the above, with <code>node scripts/probe-execution.mjs</code> against an execution
-                  id taken from an Architect export — a rejected query also reports as zero.
-                </td>
-              </tr>
-              <tr>
-                <td>A flow shows a persistently low full-trace rate</td>
-                <td>
-                  Check the flow design for a missing exit path after the AVA response. An execution
-                  that never terminates never produces history, so this is fixable in Architect
-                  rather than here.
-                </td>
-              </tr>
-              <tr>
-                <td>Sessions categorised as customer disconnect lack traces</td>
-                <td>
-                  Expected and not fixable. Rely on the transcript, which is captured for these.
-                </td>
-              </tr>
-              <tr>
-                <td>Transcript coverage below full</td>
-                <td>
-                  Ingestion is falling behind the upstream 10-day retention window. Check the cron
-                  history on the API budget view - anything missed past that window is gone.
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <DataTable label="Coverage gap recommendations">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Observation</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>No session anywhere has a trace</td>
+                  <td>
+                    Discovery returns an empty result rather than an error for every possible cause,
+                    so check them in order: execution data enabled under Admin → Organization
+                    Settings → Settings → Execution Data, no per-flow override turning it back off,
+                    the flow republished after it was enabled since capture is never backfilled, and
+                    the ingest credential holding Architect → Flow Instance → View and Search for
+                    the flow&apos;s division. A credential missing either permission is shown zero
+                    instances rather than being refused. Confirm the query itself still works before
+                    concluding any of the above, with <code>node scripts/probe-execution.mjs</code>{' '}
+                    against an execution id taken from an Architect export — a rejected query also
+                    reports as zero.
+                  </td>
+                </tr>
+                <tr>
+                  <td>A flow shows a persistently low full-trace rate</td>
+                  <td>
+                    Check the flow design for a missing exit path after the AVA response. An
+                    execution that never terminates never produces history, so this is fixable in
+                    Architect rather than here.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Sessions categorised as customer disconnect lack traces</td>
+                  <td>
+                    Expected and not fixable. Rely on the transcript, which is captured for these.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Transcript coverage below full</td>
+                  <td>
+                    Ingestion is falling behind the upstream 10-day retention window. Check the cron
+                    history on the API budget view - anything missed past that window is gone.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </DataTable>
         </Card>
       </div>
     </>

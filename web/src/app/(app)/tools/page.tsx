@@ -1,4 +1,6 @@
 import { LatencyBars, ToolBars } from '@/components/charts';
+import { DataTable } from '@/components/data-table';
+import { PageHeader } from '@/components/page-header';
 import { Card, Empty, Kpi, Pill, formatMs, formatPercent } from '@/components/ui';
 import { getToolStats } from '@/server/db';
 
@@ -24,17 +26,18 @@ export default async function ToolsPage() {
 
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>Tool performance</h1>
-          <p>
+      <PageHeader
+        eyebrow="Execution intelligence"
+        title="Tool performance"
+        description={
+          <>
             Data action calls the AVA chose to make, over the last {WINDOW_DAYS} days. A
             &ldquo;failure&rdquo; here means the call took its failure output path, which is what
             the model actually saw - independent of whether the underlying HTTP request looked
             healthy.
-          </p>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <div className="stack">
         <div className="grid grid-kpi">
@@ -69,50 +72,62 @@ export default async function ToolsPage() {
               </Card>
               <Card
                 title="Latency"
-                subtitle="Derived from the interval to the next trace item, which is the only timing the document carries"
+                subtitle="Measured from each AVA tool's recorded start and end timestamps"
               >
                 <LatencyBars data={tools.slice(0, 12)} />
               </Card>
             </div>
 
             <Card title="All tools">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Tool</th>
-                    <th className="num">Calls</th>
-                    <th className="num">Failures</th>
-                    <th className="num">Failure rate</th>
-                    <th className="num">Median</th>
-                    <th className="num">95th percentile</th>
-                    <th>Health</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tools.map((tool) => {
-                    const rate = tool.calls > 0 ? tool.failures / tool.calls : 0;
-                    return (
-                      <tr key={tool.toolName}>
-                        <td>{tool.toolName}</td>
-                        <td className="num">{tool.calls.toLocaleString()}</td>
-                        <td className="num">{tool.failures.toLocaleString()}</td>
-                        <td className="num">{formatPercent(rate)}</td>
-                        <td className="num">{formatMs(tool.p50LatencyMs)}</td>
-                        <td className="num">{formatMs(tool.p95LatencyMs)}</td>
-                        <td>
-                          {rate === 0 ? (
-                            <Pill tone="good">Healthy</Pill>
-                          ) : rate < 0.1 ? (
-                            <Pill tone="warn">Intermittent</Pill>
-                          ) : (
-                            <Pill tone="bad">Failing</Pill>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <DataTable label="All tool performance metrics">
+                <table>
+                  <thead>
+                    <tr>
+                      <th scope="col">Tool</th>
+                      <th scope="col" className="num">
+                        Calls
+                      </th>
+                      <th scope="col" className="num">
+                        Failures
+                      </th>
+                      <th scope="col" className="num">
+                        Failure rate
+                      </th>
+                      <th scope="col" className="num">
+                        Median
+                      </th>
+                      <th scope="col" className="num">
+                        95th percentile
+                      </th>
+                      <th scope="col">Health</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tools.map((tool) => {
+                      const rate = tool.calls > 0 ? tool.failures / tool.calls : 0;
+                      return (
+                        <tr key={tool.toolName}>
+                          <td>{tool.toolName}</td>
+                          <td className="num">{tool.calls.toLocaleString()}</td>
+                          <td className="num">{tool.failures.toLocaleString()}</td>
+                          <td className="num">{formatPercent(rate)}</td>
+                          <td className="num">{formatMs(tool.p50LatencyMs)}</td>
+                          <td className="num">{formatMs(tool.p95LatencyMs)}</td>
+                          <td>
+                            {rate === 0 ? (
+                              <Pill tone="good">Healthy</Pill>
+                            ) : rate < 0.1 ? (
+                              <Pill tone="warn">Intermittent</Pill>
+                            ) : (
+                              <Pill tone="bad">Failing</Pill>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </DataTable>
             </Card>
           </>
         )}

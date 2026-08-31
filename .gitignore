@@ -30,6 +30,9 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Next.js
+web/.next/
+
 # Lambda build output
 build/
 *.zip

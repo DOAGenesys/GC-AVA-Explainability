@@ -976,15 +976,33 @@ export interface ToolCall {
   ordinal: number;
   /** The timeline item this call was made from, so the UI can group calls under their host. */
   parentOrdinal: number;
+  /** Whether the action was selected by the AVA or authored directly in the flow. */
+  source: 'ava' | 'flow';
   toolName: string;
   category: string | null;
   at: string | null;
+  endAt: string | null;
+  toolExecutionId: string | null;
+  /** Internal AVA turn index. Present only for model-selected tools. */
+  avaTurnIndex: number | null;
   succeeded: boolean;
   outputPathReason: string | null;
   outputPathReasonValue: string | null;
   inputs: Record<string, unknown>;
   outputs: Record<string, unknown>;
   latencyMs: number | null;
+}
+
+/** A conversational event inside an AVA action, retaining the tool-to-turn relationship. */
+export interface AvaConversationTurn {
+  ordinal: number;
+  parentOrdinal: number;
+  turnIndex: number;
+  customerText: string | null;
+  customerAt: string | null;
+  avaText: string | null;
+  avaAt: string | null;
+  toolOrdinals: number[];
 }
 
 export interface ParsedTrace {
@@ -1002,6 +1020,7 @@ export interface ParsedTrace {
   debug: boolean;
   items: NormalizedTraceItem[];
   toolCalls: ToolCall[];
+  avaTurns: AvaConversationTurn[];
   botStates: { ordinal: number; stateName: string; at: string | null }[];
   errorCount: number;
   warningCount: number;
@@ -1093,6 +1112,7 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
   });
 
   const toolCalls: ToolCall[] = [];
+  const avaTurns: AvaConversationTurn[] = [];
   const botStates: { ordinal: number; stateName: string; at: string | null }[] = [];
   let errorCount = 0;
   let warningCount = 0;
@@ -1109,19 +1129,28 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
     // Reading only the top level reports zero tool calls for precisely the executions this archive
     // exists to explain, because a flow that delegates to an AVA has no `actionCallData` items.
     if (item.kind === 'actionCallAgenticVirtualAgent') {
-      for (const wrapper of item.payload.execution ?? []) {
-        for (const tool of wrapper.turn?.tools ?? []) {
+      (item.payload.execution ?? []).forEach((wrapper, turnIndex) => {
+        const turn = wrapper.turn;
+        if (!turn) return;
+
+        const toolOrdinals: number[] = [];
+        for (const tool of turn.tools ?? []) {
           const action = tool.dataAction;
           // There is no status field. A call that came back on the success path has a
           // `successOutput`, and its absence is what marks the failure path.
           const succeeded = typeof action?.successOutput === 'string';
+          const ordinal = toolCalls.length;
 
           toolCalls.push({
-            ordinal: toolCalls.length,
+            ordinal,
             parentOrdinal: item.ordinal,
+            source: 'ava',
             toolName: tool.toolName ?? '(unnamed tool)',
             category: categoryFromDataActionId(action?.id),
             at: tool.startDateTime ?? item.at,
+            endAt: tool.endDateTime ?? null,
+            toolExecutionId: tool.toolExecutionId ?? null,
+            avaTurnIndex: turnIndex,
             succeeded,
             outputPathReason: null,
             outputPathReasonValue: null,
@@ -1131,8 +1160,28 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
             // than inferred from whatever the flow happened to do next.
             latencyMs: msBetween(tool.startDateTime, tool.endDateTime),
           });
+          toolOrdinals.push(ordinal);
         }
-      }
+
+        const customerText = turn.fromParticipant?.digital?.text?.trim() || null;
+        const avaText =
+          turn.toParticipant?.digitalItems
+            ?.map((part) => part.text?.trim())
+            .filter((part): part is string => Boolean(part))
+            .join('\n') || null;
+
+        avaTurns.push({
+          ordinal: avaTurns.length,
+          parentOrdinal: item.ordinal,
+          turnIndex,
+          customerText,
+          customerAt:
+            turn.fromParticipant?.digital?.dateTime ?? turn.fromParticipant?.dateTime ?? null,
+          avaText,
+          avaAt: turn.toParticipant?.dateTime ?? null,
+          toolOrdinals,
+        });
+      });
       return;
     }
 
@@ -1145,9 +1194,13 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
     toolCalls.push({
       ordinal: toolCalls.length,
       parentOrdinal: item.ordinal,
+      source: 'flow',
       toolName: item.payload.actionName ?? item.payload.inputData?.actionName ?? '(unnamed action)',
       category: item.payload.inputData?.categoryName ?? null,
       at: item.at,
+      endAt: items[index + 1]?.at ?? flow.endDateTime ?? null,
+      toolExecutionId: item.payload.executionId ?? null,
+      avaTurnIndex: null,
       succeeded,
       outputPathReason: item.payload.outputPathInfo?.reason ?? null,
       outputPathReasonValue: item.payload.outputPathInfo?.reasonValue ?? null,
@@ -1173,6 +1226,7 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
     debug: Boolean(flow.flowIsDebug),
     items,
     toolCalls,
+    avaTurns,
     botStates,
     errorCount,
     warningCount,

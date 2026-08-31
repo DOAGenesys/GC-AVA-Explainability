@@ -59,6 +59,17 @@ describe('parseTrace against a real Architect export', () => {
     ]);
   });
 
+  it('preserves the AVA turn that triggered each tool call', () => {
+    const trace = parseTrace(fixture);
+
+    expect(trace.avaTurns).toHaveLength(11);
+    expect(trace.toolCalls.map((call) => call.source)).toEqual(['ava', 'ava', 'ava']);
+    expect(trace.toolCalls.map((call) => call.avaTurnIndex)).toEqual([1, 3, 5]);
+    expect(trace.avaTurns[1]?.customerText).toBe("Hi, it's about service ticket FS-70118.");
+    expect(trace.avaTurns[1]?.toolOrdinals).toEqual([0]);
+    expect(trace.toolCalls[0]?.toolExecutionId).toBe('2d70bcca-0fa1-5176-a583-6f7316495e1b');
+  });
+
   it('keys tool calls uniquely, because one AVA action hosts all of them', () => {
     const trace = parseTrace(fixture);
     const ordinals = trace.toolCalls.map((c) => c.ordinal);

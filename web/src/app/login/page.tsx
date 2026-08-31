@@ -46,6 +46,35 @@ export default async function LoginPage({
 
   return (
     <main className="login-wrap">
+      <section className="login-intro" aria-labelledby="login-intro-title">
+        {/* Full-colour flagship logo on the approved Nimbus background. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/brand/genesys-logo.svg"
+          alt="Genesys"
+          className="brand-logo"
+          width={200}
+          height={37}
+        />
+        <span className="page-eyebrow">AVA explainability</span>
+        <h1 id="login-intro-title">
+          Every answer.
+          <br />
+          Every action.
+          <br />
+          <span>Explained.</span>
+        </h1>
+        <p>
+          Connect to Genesys Cloud to understand session outcomes, inspect conversation evidence,
+          and see the exact tools your Agentic Virtual Agents chose at every turn.
+        </p>
+        <div className="login-proof" aria-label="Security and fidelity">
+          <span>Authorization Code + PKCE</span>
+          <span>Encrypted browser session</span>
+          <span>Full-fidelity execution traces</span>
+        </div>
+      </section>
+
       <div className="login-card">
         <div className="brand-lockup">
           {/*
@@ -65,10 +94,10 @@ export default async function LoginPage({
 
         {/* Kept as separate eyebrow text: brand rules forbid appending anything to the wordmark. */}
         <p className="eyebrow">Genesys Cloud</p>
-        <h1>AVA Observability</h1>
+        <h1>Welcome back</h1>
         <p className="login-lede">
-          Sign in with Authorization Code and PKCE. Your tokens are held only in an encrypted,
-          HttpOnly cookie for this browser and are never written to storage.
+          Sign in to your AVA Observability workspace. Your tokens stay in an encrypted, HttpOnly
+          cookie for this browser and are never written to storage.
         </p>
 
         {error ? (

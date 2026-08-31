@@ -90,12 +90,12 @@ function TraceRow({ item, trace }: { item: NormalizedTraceItem; trace: ParsedTra
   );
 }
 
-function ToolCallBlock({
+export function ToolCallBlock({
   call,
-  showName,
+  showName = true,
 }: {
   call: ParsedTrace['toolCalls'][number];
-  showName: boolean;
+  showName?: boolean;
 }) {
   return (
     <div className={showName ? 'tl-tool' : undefined}>
@@ -116,7 +116,7 @@ function ToolCallBlock({
       {!showName && call.category ? <Pill tone="neutral">{call.category}</Pill> : null}
 
       {call.outputPathReason ? (
-        <div style={{ fontSize: 12.5, color: 'var(--ink-muted)', marginTop: 4 }}>
+        <div className="tool-path">
           Output path: {call.outputPathReason}
           {call.outputPathReasonValue ? ` (${call.outputPathReasonValue})` : ''}
         </div>
