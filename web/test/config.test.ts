@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { normalizeRegionHost } from '@/server/config';
+import { __resetConfigCache, getServerConfig, normalizeRegionHost } from '@/server/config';
 
 describe('normalizeRegionHost', () => {
   it('accepts a bare region domain', () => {
@@ -25,5 +25,36 @@ describe('normalizeRegionHost', () => {
     for (const bad of [undefined, '', '   ', 'not-a-domain', 'mypurecloud.de/extra', 'https://']) {
       expect(normalizeRegionHost(bad)).toBeNull();
     }
+  });
+});
+
+describe('ingestion lookback windows', () => {
+  afterEach(() => {
+    delete process.env.INGEST_LOOKBACK_MINUTES;
+    delete process.env.INGEST_TURNS_LOOKBACK_MINUTES;
+    __resetConfigCache();
+  });
+
+  // Reusing the session window for turns silently stopped turn capture once: a four-hour window
+  // returned nothing for sessions days old, and because the platform deletes turns after 10 days
+  // that gap was unrecoverable. The turn window must stay wide regardless of the session window.
+  it('defaults the turn window to the full upstream retention period', () => {
+    __resetConfigCache();
+    expect(getServerConfig().ingestion.turnsLookbackMinutes).toBe(14_400);
+  });
+
+  it('keeps the turn window independent of a narrowed session window', () => {
+    process.env.INGEST_LOOKBACK_MINUTES = '15';
+    __resetConfigCache();
+
+    const { lookbackMinutes, turnsLookbackMinutes } = getServerConfig().ingestion;
+    expect(lookbackMinutes).toBe(15);
+    expect(turnsLookbackMinutes).toBeGreaterThan(lookbackMinutes);
+  });
+
+  it('still allows the turn window to be tuned explicitly', () => {
+    process.env.INGEST_TURNS_LOOKBACK_MINUTES = '600';
+    __resetConfigCache();
+    expect(getServerConfig().ingestion.turnsLookbackMinutes).toBe(600);
   });
 });

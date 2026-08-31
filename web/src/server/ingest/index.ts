@@ -157,6 +157,7 @@ export async function runTriagePass(): Promise<PassResult> {
     }
 
     const interval = lookbackInterval(cfg.ingestion.lookbackMinutes);
+    const turnsInterval = lookbackInterval(cfg.ingestion.turnsLookbackMinutes);
     let sessionsSeen = 0;
     let turnsSeen = 0;
 
@@ -165,7 +166,7 @@ export async function runTriagePass(): Promise<PassResult> {
       if (sessions.length > 0) await upsertSessions(sessions);
       sessionsSeen += sessions.length;
 
-      const turns = await getReportingTurns(flowId, interval, INGESTION, budget);
+      const turns = await getReportingTurns(flowId, turnsInterval, INGESTION, budget);
       if (turns.length > 0) await upsertTurns(turns);
       turnsSeen += turns.length;
     }
@@ -179,7 +180,7 @@ export async function runTriagePass(): Promise<PassResult> {
       flowsScanned: flowIds.length,
       sessionsSeen,
       turnsSeen,
-      detail: { interval, discoveredFlowsInline: discovered, byPath: budget.byPath },
+      detail: { interval, turnsInterval, discoveredFlowsInline: discovered, byPath: budget.byPath },
     });
 
     return {
@@ -189,6 +190,7 @@ export async function runTriagePass(): Promise<PassResult> {
         flows: flowIds.length,
         sessions: sessionsSeen,
         turns: turnsSeen,
+        turnsWindowMinutes: cfg.ingestion.turnsLookbackMinutes,
         discoveredFlowsInline: discovered ? 1 : 0,
       },
     };

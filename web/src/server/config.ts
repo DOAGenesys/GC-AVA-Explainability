@@ -64,6 +64,7 @@ export interface ServerConfig {
     /** Flow ids to ingest. Empty means "every flow whose AVA flag is set", resolved at runtime. */
     flowIds: string[];
     lookbackMinutes: number;
+    turnsLookbackMinutes: number;
     maxExecutionsPerRun: number;
   };
   /** Measured Jobs API acceptance ceiling. Not a tuning knob - 11 ids is a hard 422. */
@@ -95,11 +96,18 @@ export function getServerConfig(): ServerConfig {
       cronSecret: process.env.CRON_SECRET || null,
       configured: Boolean(clientId && clientSecret && regionHost),
       flowIds: list(process.env.AVA_FLOW_IDS),
-      // Bounds the session query only; reporting turns have no date filter. Overlaps the 10-minute
-      // cron cadence by a wide margin on purpose: session data appears with some lag, and a window
-      // matching the schedule loses whatever landed a second late. Upserts make the overlap free,
-      // and the extra width is what lets ingestion recover a gap rather than lose it permanently.
+      // Bounds the session query. Overlaps the 10-minute cron cadence by a wide margin on purpose:
+      // session data appears with some lag, and a window matching the schedule loses whatever
+      // landed a second late. Upserts make the overlap free.
       lookbackMinutes: int(process.env.INGEST_LOOKBACK_MINUTES, 240),
+      // Turns get their own, much wider window, defaulting to the full upstream TTL.
+      //
+      // The reporting-turns endpoint does honour `interval` - a four-hour window was measured
+      // returning zero turns for sessions four days old, where an unbounded request returned 45.
+      // Since this archive is the only durable copy of data the platform deletes after 10 days,
+      // the window is set to cover the whole retention period rather than just what is new: a turn
+      // missed here cannot be recovered later, while re-reading one costs an idempotent upsert.
+      turnsLookbackMinutes: int(process.env.INGEST_TURNS_LOOKBACK_MINUTES, 14_400),
       maxExecutionsPerRun: int(process.env.INGEST_MAX_EXECUTIONS_PER_RUN, 200),
     },
     jobsMaxIdsPerRequest: int(process.env.JOBS_MAX_IDS, 10),

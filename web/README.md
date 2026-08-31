@@ -300,7 +300,8 @@ summary.
 | `CRON_SECRET`                   | ✅       | Authorises the cron routes.                                          |
 | `POSTGRES_URL`                  | ✅       | Provided automatically by an attached Vercel Postgres store.         |
 | `AVA_FLOW_IDS`                  |          | Pin ingestion to specific flows. Empty means every AVA-enabled flow. |
-| `INGEST_LOOKBACK_MINUTES`       |          | Session query window. Default 240. Turns ignore it (no date filter). |
+| `INGEST_LOOKBACK_MINUTES`       |          | Session query window. Default 240.                                   |
+| `INGEST_TURNS_LOOKBACK_MINUTES` |          | Turn query window. Default 14400, the full 10-day upstream TTL.      |
 | `INGEST_MAX_EXECUTIONS_PER_RUN` |          | Ceiling per fidelity pass. Default 200.                              |
 | `JOBS_MAX_IDS`                  |          | Measured Jobs ceiling. Default and maximum 10.                       |
 | `SESSION_TTL_MINUTES`           |          | Session lifetime. Default 720.                                       |
