@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CaptureResponse } from '@/lib/capture-contract';
 import {
   FLOW_INSTANCE_TOPIC,
   MAX_CAPTURE_FLOWS,
@@ -35,6 +37,7 @@ interface CapturedEvent {
   archiveState: ArchiveState;
   bytes?: number;
   jobsStatusCode?: string | null;
+  sessionId?: string;
 }
 
 interface ChannelResponse {
@@ -42,26 +45,6 @@ interface ChannelResponse {
   connectUri: string;
   expires: string | null;
   topics: string[];
-}
-
-interface CaptureResponse {
-  ok: boolean;
-  apiCalls: number;
-  results: {
-    executionId: string;
-    status: 'skipped_settled' | 'skipped_duplicate' | 'archived' | 'no_history' | 'download_failed';
-    jobsStatusCode: string | null;
-    bytes?: number;
-  }[];
-  metrics: {
-    fetched: number;
-    archived: number;
-    noHistory: number;
-    downloadFailed: number;
-    skippedSettled: number;
-    apiCallsPerExecution: number | null;
-    jobs: unknown[];
-  };
 }
 
 interface CaptureTotals {
@@ -82,9 +65,17 @@ interface FlowOption {
   flowType: string | null;
 }
 
+interface ReadySessionNotice {
+  sessionId: string;
+  executionId: string;
+  flowId: string;
+  conversationId: string;
+}
+
 const MAX_EVENTS = 500;
 const JOBS_BATCH_SIZE = 10;
 const AUTO_FLUSH_MS = 30_000;
+const READY_SESSIONS_STORAGE_KEY = 'ava-ready-sessions-v1';
 const EMPTY_TOTALS: CaptureTotals = {
   batches: 0,
   jobs: 0,
@@ -201,6 +192,7 @@ export function NotificationStream({ flowOptions }: { flowOptions: FlowOption[] 
   const [error, setError] = useState<string | null>(null);
   const [flowError, setFlowError] = useState<string | null>(null);
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
+  const [readySessions, setReadySessions] = useState<ReadySessionNotice[]>([]);
 
   const socketRef = useRef<WebSocket | null>(null);
   const channelAbortRef = useRef<AbortController | null>(null);
@@ -262,6 +254,32 @@ export function NotificationStream({ flowOptions }: { flowOptions: FlowOption[] 
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
       if (pingTimerRef.current) clearInterval(pingTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    let restored: ReadySessionNotice[] = [];
+    try {
+      const stored = JSON.parse(
+        sessionStorage.getItem(READY_SESSIONS_STORAGE_KEY) ?? '[]',
+      ) as unknown;
+      if (Array.isArray(stored)) {
+        restored = stored
+          .filter(
+            (value): value is ReadySessionNotice =>
+              value !== null &&
+              typeof value === 'object' &&
+              typeof (value as ReadySessionNotice).sessionId === 'string' &&
+              typeof (value as ReadySessionNotice).executionId === 'string' &&
+              typeof (value as ReadySessionNotice).flowId === 'string' &&
+              typeof (value as ReadySessionNotice).conversationId === 'string',
+          )
+          .slice(0, 20);
+      }
+    } catch {
+      sessionStorage.removeItem(READY_SESSIONS_STORAGE_KEY);
+    }
+    const restore = window.setTimeout(() => setReadySessions(restored), 0);
+    return () => window.clearTimeout(restore);
   }, []);
 
   function persistPendingOnExit() {
@@ -376,6 +394,30 @@ export function NotificationStream({ flowOptions }: { flowOptions: FlowOption[] 
 
       const capture = body as CaptureResponse;
       for (const executionId of executionIds) retryableRef.current.delete(executionId);
+      const pointerByExecution = new Map(batch.map((pointer) => [pointer.executionId, pointer]));
+      const newlyReady = capture.results.flatMap((result): ReadySessionNotice[] => {
+        const pointer = pointerByExecution.get(result.executionId);
+        return result.sessionId && pointer
+          ? [
+              {
+                sessionId: result.sessionId,
+                executionId: result.executionId,
+                flowId: pointer.flowId,
+                conversationId: pointer.conversationId,
+              },
+            ]
+          : [];
+      });
+      if (newlyReady.length > 0) {
+        setReadySessions((current) => {
+          const bySession = new Map(
+            [...newlyReady, ...current].map((session) => [session.sessionId, session]),
+          );
+          const next = [...bySession.values()].slice(0, 20);
+          sessionStorage.setItem(READY_SESSIONS_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+      }
       const resultByExecution = new Map(
         capture.results.map((result) => [result.executionId, result]),
       );
@@ -395,6 +437,7 @@ export function NotificationStream({ flowOptions }: { flowOptions: FlowOption[] 
             archiveState,
             bytes: result.bytes,
             jobsStatusCode: result.jobsStatusCode,
+            sessionId: result.sessionId,
           };
         }),
       );
@@ -924,6 +967,36 @@ export function NotificationStream({ flowOptions }: { flowOptions: FlowOption[] 
           </div>
         </div>
 
+        {readySessions.length > 0 ? (
+          <div className="session-ready-notice" role="status" aria-live="polite">
+            <span className="session-ready-icon" aria-hidden="true">
+              ✓
+            </span>
+            <span>
+              <strong>
+                {readySessions.length === 1
+                  ? 'A new session is ready'
+                  : `${readySessions.length} new sessions are ready`}
+              </strong>
+              <small>
+                Jobs retrieval finished and the captured execution is now available in Sessions.
+              </small>
+            </span>
+            <Link href={`/sessions/${readySessions[0]!.sessionId}`}>Open latest session</Link>
+            <Link href="/sessions">View all sessions</Link>
+            <button
+              type="button"
+              aria-label="Dismiss session notification"
+              onClick={() => {
+                sessionStorage.removeItem(READY_SESSIONS_STORAGE_KEY);
+                setReadySessions([]);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+
         <div className="event-toolbar capture-toolbar">
           <span className="channel-lifetime">
             {expires
@@ -1039,6 +1112,13 @@ function EventCard({
               <CopyIcon />
             </button>
           ))}
+        </div>
+      ) : null}
+
+      {event.sessionId ? (
+        <div className="event-session-ready">
+          <span>Session ready in the explainability archive</span>
+          <Link href={`/sessions/${event.sessionId}`}>Open session →</Link>
         </div>
       ) : null}
 

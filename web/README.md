@@ -75,13 +75,16 @@ The Live capture studio provides:
 - explicit channel, topic, heartbeat, pending-batch, Jobs and efficiency indicators;
 - automatic and manual batch flush;
 - retry controls for transient Jobs/download failures;
+- an in-product notification with a direct link whenever a captured session becomes ready;
 - copy-by-field, copy-selected-fragment, copy-event and copy-all actions;
 - a navigation guard when unarchived pointers remain in the browser;
 - an in-memory event limit of 500 entries.
 
 The dashboard, API budget and capture coverage pages read the resulting archive. The Sessions view
-remains available for historical analytics rows created by earlier versions of the application,
-but new ingestion is execution-event driven.
+combines historical analytics rows with event-driven sessions projected from completed Jobs
+results. A Jobs-derived session includes the flow exit, nested AVA conversation and tool evidence;
+channel and bot-session analytics classifications remain unknown because they are not part of
+execution history.
 
 ## Important coverage boundary
 

@@ -5,17 +5,14 @@ import { TraceSummary, TraceTimeline } from '@/components/trace';
 import { Card, Pill, formatDateTime, outcomeTone } from '@/components/ui';
 import { buildSessionTimeline } from '@/lib/session-timeline';
 import { getExecution, getSessionDetail, listTurnsForSession } from '@/server/db';
-import { parseTrace, type FlowExecutionTrace } from '@/server/genesys/ava';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * One session, explained from both sources at once.
+ * One session, explained from every available source.
  *
- * The transcript comes from bot flow analytics and exists for every session. The trace comes from
- * execution history and exists only when the execution reached its flow's exit. Showing them on
- * one page - and saying plainly when the trace is absent and why - is the whole point: the
- * alternative is a viewer that looks broken for the majority of real conversations.
+ * Historical rows can combine reporting analytics with execution history. Event-driven captures
+ * are projected directly from Jobs history, whose nested AVA turns provide their conversation.
  */
 export default async function SessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
@@ -27,7 +24,7 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
     session.executionId ? getExecution(session.executionId) : Promise.resolve(null),
   ]);
 
-  const trace = execution?.trace != null ? parseTrace(execution.trace as FlowExecutionTrace) : null;
+  const trace = execution?.parsedTrace ?? null;
   const timeline = buildSessionTimeline(turns, trace);
 
   return (
@@ -74,10 +71,22 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
           </div>
           <div className="session-fact">
             <span>Conversation</span>
-            <strong>{turns.length} reporting turns</strong>
+            <strong>
+              {timeline.source === 'trace' ? timeline.avaTraceTurns : turns.length}{' '}
+              {timeline.source === 'trace' ? 'captured turns' : 'reporting turns'}
+            </strong>
             <small>{trace ? `${trace.toolCalls.length} tool calls` : 'Transcript fidelity'}</small>
           </div>
         </section>
+
+        {session.botResultCategory === 'Execution capture' ? (
+          <div className="callout">
+            <strong>Session created from Jobs execution history</strong>
+            The flow exit, AVA conversation and tool evidence below come from the archived trace.
+            Bot-session analytics fields such as channel and analytics outcome category are not part
+            of a Jobs response and are therefore left unknown rather than inferred.
+          </div>
+        ) : null}
 
         <Card
           title="Conversation"

@@ -40,6 +40,7 @@ describe('parseTrace against a real Architect export', () => {
     expect(trace.flowVersion).toBe('4.0');
     expect(trace.truncated).toBe(false);
     expect(trace.durationMs).toBe(99_940);
+    expect(trace.flowExitReason).toBe('DISCONNECT');
   });
 
   it('recovers every item type from its key, since the items carry no discriminant', () => {

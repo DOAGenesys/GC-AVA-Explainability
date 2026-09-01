@@ -703,6 +703,58 @@ code {
   font-size: 9px;
 }
 
+.sessions-page-actions,
+.sessions-refresh-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sessions-refresh-control .btn-link-secondary {
+  min-height: 38px;
+  padding: 7px 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.sessions-refresh-control .btn-link-secondary:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.auto-refresh-toggle {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auto-refresh-toggle span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.auto-refresh-toggle.is-on {
+  background: rgba(24, 202, 168, 0.08);
+  color: #08725d;
+}
+
+.auto-refresh-toggle.is-on span {
+  background: var(--gen-patina);
+  box-shadow: 0 0 0 3px rgba(24, 202, 168, 0.1);
+}
+
 /* Live notification console */
 
 .live-console {
@@ -1888,6 +1940,82 @@ code {
   transition: width 280ms ease;
 }
 
+.session-ready-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 17px;
+  border-bottom: 1px solid rgba(24, 202, 168, 0.2);
+  background:
+    linear-gradient(90deg, rgba(24, 202, 168, 0.1), rgba(24, 202, 168, 0.025)), var(--gen-white);
+  color: var(--ink);
+}
+
+.session-ready-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gen-patina);
+  color: var(--gen-navy);
+  font-size: 13px;
+  font-weight: 900;
+  box-shadow: 0 0 0 5px rgba(24, 202, 168, 0.09);
+}
+
+.session-ready-notice > span:nth-child(2) {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.session-ready-notice strong {
+  font-size: 11px;
+}
+
+.session-ready-notice small {
+  margin-top: 1px;
+  color: var(--ink-muted);
+  font-size: 9.5px;
+}
+
+.session-ready-notice a {
+  padding: 6px 9px;
+  border: 1px solid rgba(34, 67, 162, 0.17);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--gen-azure);
+  font-size: 9.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.session-ready-notice a:hover {
+  background: var(--gen-white);
+  text-decoration: none;
+}
+
+.session-ready-notice > button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-faint);
+  font-family: inherit;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.session-ready-notice > button:hover {
+  background: rgba(21, 37, 80, 0.06);
+  color: var(--ink);
+}
+
 .capture-toolbar > span:nth-child(2) {
   margin-left: auto;
 }
@@ -1972,6 +2100,25 @@ code {
   border-top-color: transparent;
   border-radius: 50%;
   animation: capture-spin 0.8s linear infinite;
+}
+
+.event-session-ready {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 17px;
+  border-top: 1px solid rgba(24, 202, 168, 0.14);
+  background: rgba(24, 202, 168, 0.045);
+  color: #08725d;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.event-session-ready a {
+  color: var(--gen-azure);
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 @keyframes capture-spin {
@@ -2980,6 +3127,16 @@ code {
     align-items: stretch;
   }
 
+  .sessions-page-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sessions-refresh-control {
+    justify-content: space-between;
+  }
+
   .card {
     padding: 18px 14px;
   }
@@ -3104,6 +3261,29 @@ code {
   .capture-monitor .copy-event {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .session-ready-notice {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 13px 14px;
+  }
+
+  .session-ready-notice a {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .session-ready-notice > a:first-of-type {
+    grid-row: 2;
+  }
+
+  .session-ready-notice > a:last-of-type {
+    grid-row: 3;
+  }
+
+  .session-ready-notice > button {
+    grid-column: 3;
+    grid-row: 1;
   }
 
   .event-card-head time {

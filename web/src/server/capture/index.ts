@@ -1,10 +1,16 @@
 import 'server-only';
 
+import type {
+  CaptureExecutionResult,
+  CaptureExecutionStatus,
+  CaptureMetrics,
+  CaptureResponse,
+} from '@/lib/capture-contract';
 import {
   assertDatabaseConfigured,
   claimExecutions,
-  linkExecutionToSession,
   recordCaptureRun,
+  upsertCapturedSession,
   upsertExecution,
 } from '../db';
 import {
@@ -17,36 +23,6 @@ import { newBudget, type Identity } from '../genesys/http';
 import { logger } from '../logger';
 import { dedupeCaptureTriples, type CaptureTriple } from './helpers';
 
-export type CaptureExecutionStatus =
-  'skipped_settled' | 'skipped_duplicate' | 'archived' | 'no_history' | 'download_failed';
-
-export interface CaptureExecutionResult {
-  executionId: string;
-  status: CaptureExecutionStatus;
-  jobsStatusCode: string | null;
-  bytes?: number;
-}
-
-export interface CaptureMetrics {
-  requested: number;
-  deduped: number;
-  skippedSettled: number;
-  fetched: number;
-  archived: number;
-  noHistory: number;
-  downloadFailed: number;
-  apiCallsPerExecution: number | null;
-  jobs: JobMeta[];
-  jobApiCalls: number;
-}
-
-export interface CaptureResult {
-  ok: boolean;
-  apiCalls: number;
-  results: CaptureExecutionResult[];
-  metrics: CaptureMetrics;
-}
-
 const USER_IDENTITY: Identity = { kind: 'user' };
 
 /**
@@ -55,7 +31,7 @@ const USER_IDENTITY: Identity = { kind: 'user' };
  * Settled rows (ARCHIVED or NO_HISTORY) are skipped without spending Jobs budget. Transient Jobs or
  * download failures are recorded as DOWNLOAD_FAILED so a later retry can succeed.
  */
-export async function captureExecutions(triples: CaptureTriple[]): Promise<CaptureResult> {
+export async function captureExecutions(triples: CaptureTriple[]): Promise<CaptureResponse> {
   assertDatabaseConfigured();
   const startedAt = new Date();
   const budget = newBudget();
@@ -131,11 +107,22 @@ export async function captureExecutions(triples: CaptureTriple[]): Promise<Captu
       else if (trace) status = 'archived';
       else status = 'download_failed';
 
+      const sessionId =
+        status === 'archived' || status === 'no_history'
+          ? await upsertCapturedSession({
+              executionId: execution.executionId,
+              flowId: trace?.flowId ?? event.flowId,
+              conversationId: trace?.conversationId ?? event.conversationId,
+              trace,
+              noHistory: execution.noHistory,
+            })
+          : undefined;
+
       await upsertExecution({
         executionId: execution.executionId,
         flowId: trace?.flowId ?? event.flowId,
         conversationId: trace?.conversationId ?? event.conversationId,
-        sessionId: null,
+        sessionId: sessionId ?? null,
         retrievalStatus: execution.noHistory
           ? 'NO_HISTORY'
           : trace
@@ -148,15 +135,12 @@ export async function captureExecutions(triples: CaptureTriple[]): Promise<Captu
         rawTrace: execution.trace,
       });
 
-      if (event.conversationId) {
-        await linkExecutionToSession(event.conversationId, execution.executionId);
-      }
-
       results.push({
         executionId: execution.executionId,
         status,
         jobsStatusCode: execution.statusCode,
         bytes: execution.bytes > 0 ? execution.bytes : undefined,
+        sessionId,
       });
     }
   }

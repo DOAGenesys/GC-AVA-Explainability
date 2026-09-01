@@ -834,6 +834,7 @@ export interface TraceItemPayload {
   execution?: TraceAvaTurn[];
   variables?: { variableName?: string; value?: unknown }[];
   outputVariables?: { variableName?: string; value?: unknown }[];
+  flowExitReason?: string;
   error?: unknown;
   warning?: unknown;
 }
@@ -941,6 +942,7 @@ export interface ParsedTrace {
   botStates: { ordinal: number; stateName: string; at: string | null }[];
   errorCount: number;
   warningCount: number;
+  flowExitReason: string | null;
 }
 
 function pairsToRecord(
@@ -1147,5 +1149,8 @@ export function parseTrace(doc: FlowExecutionTrace): ParsedTrace {
     botStates,
     errorCount,
     warningCount,
+    flowExitReason:
+      [...items].reverse().find((item) => item.kind === 'endedFlow')?.payload.flowExitReason ??
+      null,
   };
 }

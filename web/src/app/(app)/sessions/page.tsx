@@ -1,5 +1,7 @@
+import Link from 'next/link';
 import { DataTable } from '@/components/data-table';
 import { PageHeader } from '@/components/page-header';
+import { SessionsRefreshControl } from '@/components/sessions-refresh-control';
 import {
   Card,
   Empty,
@@ -25,10 +27,18 @@ export default async function SessionsPage() {
         title="Sessions"
         description={
           <>
-            Every AVA session in the last {WINDOW_DAYS} days, whether or not a full execution trace
-            exists for it. Sessions marked &ldquo;analytics only&rdquo; are real conversations the
-            AVA handled whose execution history the platform does not hold.
+            AVA sessions observed in the last {WINDOW_DAYS} days. Live captures become available
+            here as soon as their Jobs retrieval finishes; older analytics sessions remain visible
+            alongside them.
           </>
+        }
+        action={
+          <div className="sessions-page-actions">
+            <SessionsRefreshControl />
+            <Link className="btn-link-primary" href="/live">
+              Open live capture
+            </Link>
+          </div>
         }
       />
 
@@ -62,12 +72,20 @@ export default async function SessionsPage() {
                         {session.botResult ?? 'Unknown'}
                       </Pill>
                     </td>
-                    <td>{session.botResultCategory ?? '—'}</td>
+                    <td>
+                      {session.source === 'capture' ? (
+                        <Pill tone="neutral">Jobs capture</Pill>
+                      ) : (
+                        (session.botResultCategory ?? '—')
+                      )}
+                    </td>
                     <td className="num">{session.turnCount}</td>
                     <td className="num">{session.toolCallCount || '—'}</td>
                     <td>
                       {session.retrievalStatus === 'ARCHIVED' ? (
                         <Pill tone="good">Full trace</Pill>
+                      ) : session.retrievalStatus === 'NO_HISTORY' ? (
+                        <Pill tone="warn">No history</Pill>
                       ) : session.retrievalStatus ? (
                         <Pill tone={retrievalTone(session.retrievalStatus)}>Analytics only</Pill>
                       ) : (
@@ -84,8 +102,8 @@ export default async function SessionsPage() {
           </DataTable>
         ) : (
           <Empty title="No sessions in this window">
-            This historical analytics view contains sessions captured by the retired polling
-            pipeline. New execution traces arrive through Live capture.
+            Start Live capture and complete one of the selected flows. The session will appear here
+            after its execution-history job finishes.
           </Empty>
         )}
       </Card>
