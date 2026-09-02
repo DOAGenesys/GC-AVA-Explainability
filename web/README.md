@@ -67,6 +67,29 @@ the regional download host and do not consume the Platform API allowance.
 Before submitting a job, the server skips execution IDs already stored as `ARCHIVED` or
 `NO_HISTORY`, so duplicate notifications and repeated captures do not spend Genesys API budget.
 
+## Bot Flows - Reporting Turns
+
+The **Reporting turns** section queries:
+
+```text
+GET /api/v2/analytics/botflows/{botFlowId}/divisions/reportingturns
+```
+
+This is a separate, on-demand explainability source. One API page returns up to 250 turns across
+many sessions for a bot flow, filtered by the signed-in user's permitted divisions and ordered with
+the newest session first. The view exposes user input, bot prompts, ask-action outcomes, intents,
+slots, knowledge searches and feedback, guardrail outcomes, and session-end details.
+
+The server retrieves at most four Genesys pages per browser response (up to 1,000 turns), then
+offers **Load next 1,000 turns** when more data exists. Continuation requests forward the
+already-encoded `nextUri` supplied by Genesys without encoding it again. The result is complete only
+when `nextUri` is absent.
+
+Reporting Turns is not a replacement for Jobs: it explains the conversational and analytics
+evidence in bulk, while Jobs supplies the complete execution timeline and tool input/output
+evidence. Reporting Turns is also not added to the permanent archive by this interactive view.
+Genesys deletes these resources after approximately, but not before, 10 days.
+
 ## User experience
 
 The Live capture studio provides:
@@ -157,6 +180,9 @@ src/app/api/notifications/channel/      Authenticated channel creation
 src/app/api/capture/executions/         Authenticated Jobs batch endpoint
 src/server/capture/                      Deduplication, retrieval and persistence
 src/server/genesys/ava.ts               Jobs API and execution trace parser
+src/app/(app)/reporting-turns/          Division-aware Reporting Turns view
+src/app/api/reporting-turns/             Paginated Reporting Turns proxy
+src/server/genesys/reporting-turns.ts   Opaque nextUri traversal
 src/server/db/index.ts                   Archive writes, capture metrics and reads
 src/server/db/schema.sql                 Postgres schema
 ```
