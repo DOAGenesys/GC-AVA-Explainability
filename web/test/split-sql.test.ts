@@ -7,7 +7,6 @@ import { splitSqlStatements } from '../scripts/split-sql.mjs';
 const REQUIRED_TABLES = [
   'ava_flows',
   'ava_sessions',
-  'ava_turns',
   'ava_executions',
   'ava_tool_calls',
   'ingest_runs',

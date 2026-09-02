@@ -5,28 +5,25 @@ import { TechnicalAssets } from '@/components/technical-assets';
 import { TraceSummary, TraceTimeline } from '@/components/trace';
 import { Card, Pill, formatDateTime, outcomeTone } from '@/components/ui';
 import { buildSessionTimeline } from '@/lib/session-timeline';
-import { getExecution, getSessionDetail, listTurnsForSession } from '@/server/db';
+import { getExecution, getSessionDetail } from '@/server/db';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * One session, explained from every available source.
  *
- * Historical rows can combine reporting analytics with execution history. Event-driven captures
- * are projected directly from Jobs history, whose nested AVA turns provide their conversation.
+ * Event-driven captures are projected directly from Jobs history, whose nested AVA turns provide
+ * their conversation.
  */
 export default async function SessionPage({ params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
   const session = await getSessionDetail(sessionId);
   if (!session) notFound();
 
-  const [turns, execution] = await Promise.all([
-    listTurnsForSession(sessionId),
-    session.executionId ? getExecution(session.executionId) : Promise.resolve(null),
-  ]);
+  const execution = session.executionId ? await getExecution(session.executionId) : null;
 
   const trace = execution?.parsedTrace ?? null;
-  const timeline = buildSessionTimeline(turns, trace);
+  const timeline = buildSessionTimeline(trace);
 
   return (
     <>
@@ -99,10 +96,7 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
           </div>
           <div className="session-fact">
             <span>Conversation</span>
-            <strong>
-              {timeline.source === 'trace' ? timeline.avaTraceTurns : turns.length}{' '}
-              {timeline.source === 'trace' ? 'captured turns' : 'reporting turns'}
-            </strong>
+            <strong>{timeline.avaTraceTurns} captured turns</strong>
             <small>{trace ? `${trace.toolCalls.length} tool calls` : 'Transcript fidelity'}</small>
           </div>
         </section>

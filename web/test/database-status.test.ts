@@ -6,14 +6,7 @@ const sql = vi.fn();
 vi.mock('@vercel/postgres', () => ({ sql: (...args: unknown[]) => sql(...args) }));
 vi.mock('server-only', () => ({}));
 
-const ALL_TABLES = [
-  'ava_flows',
-  'ava_sessions',
-  'ava_turns',
-  'ava_executions',
-  'ava_tool_calls',
-  'ingest_runs',
-];
+const ALL_TABLES = ['ava_flows', 'ava_sessions', 'ava_executions', 'ava_tool_calls', 'ingest_runs'];
 
 /** Shape a to_regclass probe row where `present` tables resolve and the rest come back NULL. */
 function probeRow(present: string[]): Record<string, string | null> {
@@ -62,7 +55,7 @@ describe('getDatabaseStatus', () => {
     sql.mockResolvedValue({ rows: [probeRow(['ava_flows', 'ava_sessions'])] });
     await expect(getDatabaseStatus()).resolves.toEqual({
       state: 'schema-missing',
-      missingTables: ['ava_turns', 'ava_executions', 'ava_tool_calls', 'ingest_runs'],
+      missingTables: ['ava_executions', 'ava_tool_calls', 'ingest_runs'],
     });
   });
 

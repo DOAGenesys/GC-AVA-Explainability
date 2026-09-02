@@ -6,8 +6,8 @@ import { parseTrace, type FlowExecutionTrace, type ParsedTrace } from '../genesy
 
 /**
  * Postgres access. Plain parameterised SQL rather than an ORM: the interesting queries here are
- * aggregations over three sources with deliberately different coverage, and expressing "sessions
- * analytics can see that execution history cannot" is clearer in SQL than through a query builder.
+ * aggregations over capture and session data with deliberately different coverage are clearer in
+ * SQL than through a query builder.
  */
 
 export function assertDatabaseConfigured(): void {
@@ -18,7 +18,6 @@ export function assertDatabaseConfigured(): void {
 const REQUIRED_TABLES = [
   'ava_flows',
   'ava_sessions',
-  'ava_turns',
   'ava_executions',
   'ava_tool_calls',
   'ingest_runs',
@@ -47,7 +46,6 @@ export async function getDatabaseStatus(): Promise<DatabaseStatus> {
       SELECT
         to_regclass('ava_flows')::text      AS ava_flows,
         to_regclass('ava_sessions')::text   AS ava_sessions,
-        to_regclass('ava_turns')::text      AS ava_turns,
         to_regclass('ava_executions')::text AS ava_executions,
         to_regclass('ava_tool_calls')::text AS ava_tool_calls,
         to_regclass('ingest_runs')::text    AS ingest_runs
@@ -356,7 +354,6 @@ export async function recordCaptureRun(run: CaptureRunRecord): Promise<void> {
 export interface OverviewMetrics {
   sessions: number;
   conversations: number;
-  turns: number;
   executionsArchived: number;
   executionsNoHistory: number;
   toolCalls: number;
@@ -371,7 +368,6 @@ export async function getOverviewMetrics(days: number): Promise<OverviewMetrics>
   const { rows } = await sql<{
     sessions: string;
     conversations: string;
-    turns: string;
     archived: string;
     no_history: string;
     tool_calls: string;
@@ -392,7 +388,6 @@ export async function getOverviewMetrics(days: number): Promise<OverviewMetrics>
     SELECT
       (SELECT count(*) FROM window_sessions) AS sessions,
       (SELECT count(DISTINCT conversation_id) FROM window_sessions) AS conversations,
-      (SELECT count(*) FROM ava_turns WHERE turn_start > now() - (${days} || ' days')::interval) AS turns,
       (SELECT count(*) FROM ava_executions
         WHERE retrieval_status = 'ARCHIVED'
           AND execution_id IN (SELECT execution_id FROM capture_execution_ids)
@@ -433,7 +428,6 @@ export async function getOverviewMetrics(days: number): Promise<OverviewMetrics>
   return {
     sessions,
     conversations: Number(row?.conversations ?? 0),
-    turns: Number(row?.turns ?? 0),
     executionsArchived: Number(row?.archived ?? 0),
     executionsNoHistory: Number(row?.no_history ?? 0),
     toolCalls: Number(row?.tool_calls ?? 0),
@@ -545,7 +539,7 @@ export async function listSessions(days: number, limit: number): Promise<Session
     analytics_sessions AS (
       SELECT s.session_id, s.flow_id, coalesce(f.name, e.flow_name) AS flow_name,
              s.conversation_id, s.bot_result, s.bot_result_category, s.date_created,
-             (SELECT count(*) FROM ava_turns t WHERE t.session_id = s.session_id) AS turn_count,
+             0::bigint AS turn_count,
              e.execution_id, e.retrieval_status, e.tool_call_count, e.trace,
              CASE
                WHEN s.bot_result_category = 'Execution capture' THEN 'capture'
@@ -617,80 +611,6 @@ export async function listSessions(days: number, limit: number): Promise<Session
       source: row.source,
     };
   });
-}
-
-export interface CoverageReport {
-  sessions: number;
-  sessionsWithExecution: number;
-  sessionsWithoutExecution: number;
-  sessionsWithNoHistory: number;
-  sessionsWithTurns: number;
-  byCategory: { category: string; sessions: number; withExecution: number }[];
-}
-
-/**
- * The coverage question this whole app exists to answer: how much of what the AVA actually did is
- * visible at full fidelity, and how much is only visible as analytics?
- */
-export async function getCoverageReport(days: number): Promise<CoverageReport> {
-  const { rows: totals } = await sql<{
-    sessions: string;
-    with_execution: string;
-    with_no_history: string;
-    with_turns: string;
-  }>`
-    WITH w AS (
-      SELECT * FROM ava_sessions WHERE date_created > now() - (${days} || ' days')::interval
-    )
-    SELECT
-      count(*) AS sessions,
-      count(*) FILTER (WHERE EXISTS (
-        SELECT 1 FROM ava_executions e
-        WHERE e.conversation_id = w.conversation_id AND e.retrieval_status = 'ARCHIVED'
-      )) AS with_execution,
-      count(*) FILTER (WHERE EXISTS (
-        SELECT 1 FROM ava_executions e
-        WHERE e.conversation_id = w.conversation_id AND e.retrieval_status = 'NO_HISTORY'
-      )) AS with_no_history,
-      count(*) FILTER (WHERE EXISTS (
-        SELECT 1 FROM ava_turns t WHERE t.session_id = w.session_id
-      )) AS with_turns
-    FROM w
-  `;
-
-  const { rows: byCategory } = await sql<{
-    category: string | null;
-    sessions: string;
-    with_execution: string;
-  }>`
-    WITH w AS (
-      SELECT * FROM ava_sessions WHERE date_created > now() - (${days} || ' days')::interval
-    )
-    SELECT bot_result_category AS category,
-           count(*) AS sessions,
-           count(*) FILTER (WHERE EXISTS (
-             SELECT 1 FROM ava_executions e
-             WHERE e.conversation_id = w.conversation_id AND e.retrieval_status = 'ARCHIVED'
-           )) AS with_execution
-    FROM w
-    GROUP BY 1 ORDER BY 2 DESC
-  `;
-
-  const row = totals[0];
-  const sessions = Number(row?.sessions ?? 0);
-  const withExecution = Number(row?.with_execution ?? 0);
-  return {
-    sessions,
-    sessionsWithExecution: withExecution,
-    sessionsWithoutExecution: sessions - withExecution,
-    sessionsWithNoHistory: Number(row?.with_no_history ?? 0),
-    sessionsWithTurns: Number(row?.with_turns ?? 0),
-    byCategory: byCategory.map((r) => ({
-      category: r.category ?? 'Unclassified',
-      sessions: Number(r.sessions),
-      withExecution: Number(r.with_execution),
-    })),
-  };
 }
 
 export interface CaptureCoverageReport {
@@ -972,71 +892,4 @@ export async function getSessionDetail(sessionId: string): Promise<SessionDetail
     executionId: captured.execution_id,
     retrievalStatus: captured.retrieval_status,
   };
-}
-
-export interface TurnRow {
-  turnId: string;
-  sequence: number | null;
-  askAction: string | null;
-  askActionResult: string | null;
-  userInput: unknown;
-  botPrompts: unknown;
-  turnStart: string | null;
-  turnEnd: string | null;
-}
-
-export async function listTurnsForSession(sessionId: string): Promise<TurnRow[]> {
-  const { rows } = await sql<{
-    turn_id: string;
-    sequence_number: number | null;
-    ask_action: string | null;
-    ask_action_result: string | null;
-    user_input: unknown;
-    bot_prompts: unknown;
-    turn_start: string | null;
-    turn_end: string | null;
-  }>`
-    SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts,
-           turn_start, turn_end
-    FROM ava_turns WHERE session_id = ${sessionId}
-    ORDER BY sequence_number NULLS LAST, turn_start NULLS LAST, turn_id
-  `;
-  return rows.map((r) => ({
-    turnId: r.turn_id,
-    sequence: r.sequence_number,
-    askAction: r.ask_action,
-    askActionResult: r.ask_action_result,
-    userInput: r.user_input,
-    botPrompts: r.bot_prompts,
-    turnStart: r.turn_start,
-    turnEnd: r.turn_end,
-  }));
-}
-
-export async function listTurnsForConversation(conversationId: string): Promise<TurnRow[]> {
-  const { rows } = await sql<{
-    turn_id: string;
-    sequence_number: number | null;
-    ask_action: string | null;
-    ask_action_result: string | null;
-    user_input: unknown;
-    bot_prompts: unknown;
-    turn_start: string | null;
-    turn_end: string | null;
-  }>`
-    SELECT turn_id, sequence_number, ask_action, ask_action_result, user_input, bot_prompts,
-           turn_start, turn_end
-    FROM ava_turns WHERE conversation_id = ${conversationId}
-    ORDER BY sequence_number NULLS LAST, turn_start NULLS LAST, turn_id
-  `;
-  return rows.map((r) => ({
-    turnId: r.turn_id,
-    sequence: r.sequence_number,
-    askAction: r.ask_action,
-    askActionResult: r.ask_action_result,
-    userInput: r.user_input,
-    botPrompts: r.bot_prompts,
-    turnStart: r.turn_start,
-    turnEnd: r.turn_end,
-  }));
 }

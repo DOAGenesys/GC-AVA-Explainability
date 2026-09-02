@@ -19,14 +19,7 @@ function timeLabel(value: string | null): string | null {
 }
 
 function associationLabel(value: ToolAssociation): string {
-  switch (value) {
-    case 'trace-native':
-      return 'Trace-native link';
-    case 'transcript-match':
-      return 'Transcript matched';
-    case 'time-match':
-      return 'Time matched';
-  }
+  return value === 'trace-native' ? 'Trace-native link' : 'Trace link';
 }
 
 function MessageEvent({
@@ -110,7 +103,7 @@ export function SessionTimelineView({ timeline }: { timeline: SessionTimeline })
   if (timeline.events.length === 0) {
     return (
       <Empty title="No conversation events available">
-        Reporting turns have not been captured and this session has no usable execution trace.
+        This session has no usable Jobs execution history.
       </Empty>
     );
   }
@@ -120,19 +113,11 @@ export function SessionTimelineView({ timeline }: { timeline: SessionTimeline })
       <div className="conversation-status" aria-label="Conversation evidence summary">
         <div>
           <span className="status-label">Conversation source</span>
-          <strong>
-            {timeline.source === 'reporting' ? 'Reporting transcript' : 'Execution trace'}
-          </strong>
+          <strong>Execution trace</strong>
         </div>
         <div>
           <span className="status-label">Turn associations</span>
-          <strong>
-            {timeline.source === 'trace'
-              ? 'Trace native'
-              : timeline.hasTrace
-                ? `${timeline.matchedTurns}/${timeline.customerTurns} customer turns`
-                : 'Trace unavailable'}
-          </strong>
+          <strong>Trace native</strong>
         </div>
         <div>
           <span className="status-label">AVA tools placed</span>
@@ -161,12 +146,6 @@ export function SessionTimelineView({ timeline }: { timeline: SessionTimeline })
         </div>
       </div>
 
-      {!timeline.hasTrace ? (
-        <div className="timeline-notice">
-          <strong>Transcript-only view.</strong>
-          Tool calls require execution history, which is not available for this session.
-        </div>
-      ) : null}
       {timeline.truncated ? (
         <div className="timeline-notice is-warning">
           <strong>The execution trace is partial.</strong>
@@ -174,14 +153,6 @@ export function SessionTimelineView({ timeline }: { timeline: SessionTimeline })
           unknown.
         </div>
       ) : null}
-      {timeline.source === 'trace' ? (
-        <div className="timeline-notice">
-          <strong>Recovered from execution history.</strong>
-          Reporting turns were unavailable, so message text and ordering come directly from the
-          archived trace.
-        </div>
-      ) : null}
-
       <div className="conversation-stream">
         {timeline.events.map((event) =>
           event.kind === 'tool' ? (
@@ -204,7 +175,7 @@ export function SessionTimelineView({ timeline }: { timeline: SessionTimeline })
               <strong>Unlinked AVA tool calls</strong>
               <small>
                 The trace proves these calls happened, but not enough evidence exists to assign them
-                to a reporting turn.
+                to a specific AVA conversation turn.
               </small>
             </span>
             <Pill tone="warn">{timeline.unplacedTools.length}</Pill>

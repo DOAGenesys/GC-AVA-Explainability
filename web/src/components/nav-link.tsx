@@ -36,13 +36,6 @@ function NavIcon({ href }: { href: string }) {
         <path d="M8 12h.01M12 12h.01M16 12h.01" />
       </>
     ),
-    '/reporting-turns': (
-      <>
-        <path d="M4 5h16M4 12h10M4 19h7" />
-        <circle cx="18" cy="17" r="3" />
-        <path d="m20.2 19.2 1.8 1.8" />
-      </>
-    ),
     '/live': (
       <>
         <path d="M5.6 8.5a5 5 0 0 0 0 7M2.8 5.7a9 9 0 0 0 0 12.6M18.4 8.5a5 5 0 0 1 0 7M21.2 5.7a9 9 0 0 1 0 12.6" />

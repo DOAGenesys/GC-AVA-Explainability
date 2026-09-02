@@ -1,10 +1,9 @@
 -- AVA observability archive.
 --
 -- Shaped around one fact from the platform: the three data sources have different coverage, so the
--- schema must be able to represent a conversation that analytics can see but execution history
--- cannot. That is why sessions and turns are not children of executions - they are peers, joined
--- by conversation id, and an execution row is allowed to exist in a "no history" terminal state
--- rather than being absent.
+-- schema must be able to represent a conversation that session analytics can see but execution
+-- history cannot. Sessions therefore remain separate from executions, joined by conversation id,
+-- and an execution row can carry a "no history" terminal state rather than being absent.
 
 CREATE TABLE IF NOT EXISTS ava_flows (
   flow_id           TEXT PRIMARY KEY,
@@ -40,26 +39,6 @@ CREATE TABLE IF NOT EXISTS ava_sessions (
 CREATE INDEX IF NOT EXISTS ava_sessions_flow_created_idx ON ava_sessions (flow_id, date_created DESC);
 CREATE INDEX IF NOT EXISTS ava_sessions_conversation_idx ON ava_sessions (conversation_id);
 CREATE INDEX IF NOT EXISTS ava_sessions_category_idx ON ava_sessions (bot_result_category);
-
--- Turn-level transcript. Retention upstream is 10 days, so this table is the only durable copy.
-CREATE TABLE IF NOT EXISTS ava_turns (
-  turn_id           TEXT PRIMARY KEY,
-  session_id        TEXT,
-  flow_id           TEXT NOT NULL,
-  conversation_id   TEXT,
-  sequence_number   INTEGER,
-  ask_action        TEXT,
-  ask_action_result TEXT,
-  user_input        JSONB,
-  bot_prompts       JSONB,
-  turn_start        TIMESTAMPTZ,
-  turn_end          TIMESTAMPTZ,
-  raw               JSONB NOT NULL,
-  ingested_at       TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS ava_turns_session_idx ON ava_turns (session_id, sequence_number);
-CREATE INDEX IF NOT EXISTS ava_turns_flow_start_idx ON ava_turns (flow_id, turn_start DESC);
 
 -- Full-fidelity execution history. `retrieval_status` carries the honest outcome, including the
 -- case where the platform holds nothing and never will.

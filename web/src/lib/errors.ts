@@ -16,7 +16,6 @@ export const ERROR_CODES = [
   'GENESYS_AUTH_FAILED',
   'GENESYS_PERMISSION_DENIED',
   'GENESYS_NOTIFICATION_PERMISSION_DENIED',
-  'GENESYS_REPORTING_PERMISSION_DENIED',
   // Capture
   'JOBS_BATCH_REJECTED',
   'NO_EXECUTION_HISTORY',
@@ -104,15 +103,6 @@ export const ERROR_META: Record<ErrorCode, ErrorMeta> = {
     message: 'Genesys denied access to real-time notifications.',
     nextAction:
       'Grant the signed-in user Notifications subscription and topic-specific access, ensure the Code Authorization client permits it, then sign in again.',
-    httpStatus: 403,
-  },
-  GENESYS_REPORTING_PERMISSION_DENIED: {
-    code: 'GENESYS_REPORTING_PERMISSION_DENIED',
-    severity: 'error',
-    retryable: false,
-    message: 'Genesys denied access to division-aware bot-flow reporting data.',
-    nextAction:
-      'Ask an administrator for bot-flow analytics read access and verify that your user can access the required divisions.',
     httpStatus: 403,
   },
   JOBS_BATCH_REJECTED: {
