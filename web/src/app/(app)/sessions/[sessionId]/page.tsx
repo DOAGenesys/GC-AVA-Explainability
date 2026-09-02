@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { SessionTimelineView } from '@/components/session-timeline';
+import { TechnicalAssets } from '@/components/technical-assets';
 import { TraceSummary, TraceTimeline } from '@/components/trace';
 import { Card, Pill, formatDateTime, outcomeTone } from '@/components/ui';
 import { buildSessionTimeline } from '@/lib/session-timeline';
@@ -49,6 +50,33 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
       />
 
       <div className="stack">
+        <TechnicalAssets
+          summary={
+            trace
+              ? 'This view aligns the archived Jobs trace with its session and presents the exact evidence recorded during execution.'
+              : 'This view has session metadata, but no retrievable Jobs trace; unavailable evidence remains explicitly unknown.'
+          }
+          assets={[
+            {
+              name: 'Archived execution payload',
+              role: trace
+                ? 'The pre-signed Jobs download was parsed once at capture time and is now read from Postgres.'
+                : 'The Jobs retrieval state explains why execution-level evidence is not available.',
+              reference: 'ava_executions.parsed_trace',
+            },
+            {
+              name: 'Evidence-aligned timeline',
+              role: 'Orders AVA messages and data-action calls from the trace without inferring missing turns or outcomes.',
+              reference: 'buildSessionTimeline(turns, trace)',
+            },
+            {
+              name: 'Tool and flow trace',
+              role: 'Exposes recorded tool inputs, outputs, failure paths, state transitions, waits, and the Genesys truncation flag.',
+              reference: 'Jobs execution history',
+            },
+          ]}
+        />
+
         <section className="session-overview" aria-label="Session summary">
           <div className="session-outcome">
             <span className="kpi-label">Outcome</span>

@@ -2961,6 +2961,109 @@ code {
   border: 0;
 }
 
+/* Shared technical lineage ------------------------------------------------ */
+
+.technical-assets {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(210px, 0.28fr) minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(21, 37, 80, 0.1);
+  border-radius: var(--radius);
+  background: var(--gen-white);
+  box-shadow: var(--shadow-card);
+}
+
+.technical-assets > header {
+  padding: 18px 20px;
+  border-right: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 12% 5%, rgba(177, 202, 218, 0.23), transparent 12rem),
+    var(--surface-soft);
+}
+
+.technical-assets > header > span {
+  color: var(--gen-azure);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.technical-assets > header > p {
+  max-width: 43ch;
+  margin: 7px 0 0;
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.technical-asset-list {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+}
+
+.technical-asset {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 21px minmax(0, 1fr);
+  gap: 8px;
+  padding: 16px 14px;
+  border-right: 1px solid var(--line);
+}
+
+.technical-asset:last-child {
+  border-right: 0;
+}
+
+.technical-asset > span {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid rgba(34, 67, 162, 0.14);
+  border-radius: 6px;
+  background: rgba(34, 67, 162, 0.045);
+  color: var(--gen-azure);
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 700;
+}
+
+.technical-asset dl {
+  min-width: 0;
+  margin: 0;
+}
+
+.technical-asset dt {
+  color: var(--ink);
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.technical-asset dd {
+  margin: 4px 0 0;
+  color: var(--ink-muted);
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.technical-asset .technical-reference {
+  margin-top: 8px;
+}
+
+.technical-reference code {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--gen-nimbus-shade);
+  color: var(--gen-azure);
+  font-size: 7.5px;
+  line-height: 1.45;
+}
+
 /* Reporting Turns --------------------------------------------------------- */
 
 .reporting-workspace {
@@ -3769,6 +3872,19 @@ code {
     border-bottom: 0;
   }
 
+  .technical-assets {
+    grid-template-columns: 1fr;
+  }
+
+  .technical-assets > header {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .technical-assets > header > p {
+    max-width: 90ch;
+  }
+
   .reporting-technical {
     grid-template-columns: 1fr;
   }
@@ -4198,6 +4314,19 @@ code {
 
   .login-card {
     padding: 26px 21px;
+  }
+
+  .technical-asset-list {
+    grid-template-columns: 1fr;
+  }
+
+  .technical-asset {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .technical-asset:last-child {
+    border-bottom: 0;
   }
 
   .reporting-technical > div,

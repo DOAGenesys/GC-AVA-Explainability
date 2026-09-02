@@ -1,6 +1,7 @@
 import { BudgetLine } from '@/components/charts';
 import { DataTable } from '@/components/data-table';
 import { PageHeader } from '@/components/page-header';
+import { TechnicalAssets } from '@/components/technical-assets';
 import { Card, Empty, Kpi, Pill, formatDateTime, formatMs } from '@/components/ui';
 import { listCaptureRuns } from '@/server/db';
 
@@ -59,6 +60,32 @@ export default async function BudgetPage() {
       />
 
       <div className="stack">
+        <TechnicalAssets
+          summary="Every capture batch carries its own measured API budget; this page reads those records rather than estimating cost from traffic."
+          assets={[
+            {
+              name: 'Channel creation',
+              role: 'Opening a temporary notification channel costs one Platform API call; WebSocket events and socket subscription messages do not.',
+              reference: 'POST /api/v2/notifications/channels',
+            },
+            {
+              name: 'Jobs accounting',
+              role: 'Counts submit and poll attempts, retries, and 429 responses. A full 10-ID batch has a two-call floor, or 0.2 calls per execution.',
+              reference: 'POST + GET /api/v2/flows/instances/jobs',
+            },
+            {
+              name: 'Download boundary',
+              role: 'Pre-signed trace downloads use the regional download host and are deliberately excluded from the Platform API allowance.',
+              reference: 'api-downloads.{region}',
+            },
+            {
+              name: 'Run ledger',
+              role: 'Persists duration, retrieved and no-history counts, rate limits, failures, and calls per execution for every batch.',
+              reference: 'ingest_runs · kind=capture',
+            },
+          ]}
+        />
+
         <div className="grid grid-kpi">
           <Kpi
             label="API calls, 24h"

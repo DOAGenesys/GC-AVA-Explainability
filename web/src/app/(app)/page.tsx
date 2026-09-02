@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ToolBars } from '@/components/charts';
 import { DataTable } from '@/components/data-table';
 import { PageHeader } from '@/components/page-header';
+import { TechnicalAssets } from '@/components/technical-assets';
 import { Card, Empty, Kpi } from '@/components/ui';
 import { getReadiness } from '@/server/config';
 import { getDatabaseStatus, getOverviewMetrics, getToolStats } from '@/server/db';
@@ -43,6 +44,27 @@ export default async function DashboardPage() {
       />
 
       <div className="stack">
+        <TechnicalAssets
+          summary="This dashboard is a Postgres view of the event-driven capture pipeline; loading it does not call Genesys."
+          assets={[
+            {
+              name: 'Flow-instance notification',
+              role: 'Supplies the execution, flow, and conversation IDs directly—no discovery query.',
+              reference: 'v2.flows.instances.flow.{id}',
+            },
+            {
+              name: 'Bulk Jobs retrieval',
+              role: 'Submits up to 10 execution IDs, polls the job until ready, then downloads each full trace.',
+              reference: 'POST + GET /api/v2/flows/instances/jobs',
+            },
+            {
+              name: 'Capture archive',
+              role: 'Stores trace, tool, status, and per-batch cost records used by every metric below.',
+              reference: 'ava_executions · ava_tool_calls · ingest_runs',
+            },
+          ]}
+        />
+
         <div className="grid grid-kpi">
           <Kpi
             label="Full traces"

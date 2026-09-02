@@ -1,6 +1,7 @@
 import { LatencyBars, ToolBars } from '@/components/charts';
 import { DataTable } from '@/components/data-table';
 import { PageHeader } from '@/components/page-header';
+import { TechnicalAssets } from '@/components/technical-assets';
 import { Card, Empty, Kpi, Pill, formatMs, formatPercent } from '@/components/ui';
 import { getToolStats } from '@/server/db';
 
@@ -40,6 +41,27 @@ export default async function ToolsPage() {
       />
 
       <div className="stack">
+        <TechnicalAssets
+          summary="These metrics are derived exclusively from successfully archived Jobs traces; the page itself performs one Postgres aggregate read."
+          assets={[
+            {
+              name: 'Execution-trace parser',
+              role: 'Finds AVA data-action calls and records their names, timestamps, inputs, outputs, and chosen success or failure path.',
+              reference: 'Jobs download → parseTrace()',
+            },
+            {
+              name: 'Flattened tool evidence',
+              role: 'Stores one searchable row per recorded call while retaining the original trace as the source of truth.',
+              reference: 'ava_tool_calls',
+            },
+            {
+              name: 'Capture-scoped aggregates',
+              role: 'Computes volume, failures, median latency, and 95th percentile only for executions observed by Live capture.',
+              reference: 'Postgres · last 7 days',
+            },
+          ]}
+        />
+
         <div className="grid grid-kpi">
           <Kpi label="Distinct tools" value={tools.length} />
           <Kpi label="Calls" value={totalCalls.toLocaleString()} />

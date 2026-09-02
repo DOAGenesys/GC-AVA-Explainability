@@ -109,6 +109,10 @@ results. A Jobs-derived session includes the flow exit, nested AVA conversation 
 channel and bot-session analytics classifications remain unknown because they are not part of
 execution history.
 
+Every Notifications + Jobs page includes a compact **Under the hood** lineage panel. It identifies
+the exact topic, API endpoint, browser/server boundary, archive table, or derivation used by that
+section, and explicitly states when a page reads only Postgres rather than calling Genesys.
+
 ## Important coverage boundary
 
 This is an interactive WebSocket capture surface. A topic is active only while a signed-in browser
@@ -175,6 +179,7 @@ npm run build
 ```text
 src/app/(app)/live/page.tsx             Capture page
 src/components/notification-stream.tsx  Multi-flow WebSocket, queue and capture UX
+src/components/technical-assets.tsx     Per-section capture lineage
 src/lib/notification-events.ts          Topic construction and event-pointer validation
 src/app/api/notifications/channel/      Authenticated channel creation
 src/app/api/capture/executions/         Authenticated Jobs batch endpoint
