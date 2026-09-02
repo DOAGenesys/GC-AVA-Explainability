@@ -109,9 +109,10 @@ results. A Jobs-derived session includes the flow exit, nested AVA conversation 
 channel and bot-session analytics classifications remain unknown because they are not part of
 execution history.
 
-Every Notifications + Jobs page includes a compact **Under the hood** lineage panel. It identifies
-the exact topic, API endpoint, browser/server boundary, archive table, or derivation used by that
-section, and explicitly states when a page reads only Postgres rather than calling Genesys.
+Every Notifications + Jobs page includes a compact **Genesys Cloud assets** lineage panel. It
+documents only the underlying Genesys channel, notification topic, asynchronous Jobs operation,
+per-execution result, and regional trace download relevant to that section, plus how those assets
+connect.
 
 ## Important coverage boundary
 

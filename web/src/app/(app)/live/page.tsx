@@ -25,32 +25,32 @@ export default async function LiveEventsPage() {
       />
       <div className="stack">
         <TechnicalAssets
-          summary="The browser listens for exact execution pointers; the server retrieves and archives the corresponding traces with the signed-in user's Genesys access."
+          summary="The signed-in Genesys user opens a notification channel, subscribes to exact flow topics, and sends the resulting execution IDs to the bulk Jobs API."
           assets={[
             {
-              name: 'OAuth + protected app routes',
-              role: 'Authorization Code with PKCE keeps the user token encrypted in an HttpOnly cookie; POST routes also require CSRF validation.',
-              reference: '/api/notifications/channel · /api/capture/executions',
+              name: 'Genesys OAuth',
+              role: 'Authorization Code with PKCE supplies a user-context token, so division and API permissions match the signed-in Genesys user.',
+              reference: 'OAuth 2.0 Authorization Code + PKCE',
             },
             {
               name: 'Notifications channel',
-              role: 'Creates one temporary channel, then subscribes to concrete flow topics over its WebSocket—subscription messages add no second Platform API call.',
+              role: 'One individual API request creates a temporary channel and returns the WebSocket connectUri used for the live stream.',
               reference: 'POST /api/v2/notifications/channels',
             },
             {
               name: 'Flow-instance topic',
-              role: 'Emits executionId, flowId, and conversationId so capture needs no conversation or execution discovery.',
+              role: 'One concrete subscription is sent over the WebSocket for each selected flow; wildcards are not supported.',
               reference: 'v2.flows.instances.flow.{id}',
             },
             {
-              name: 'Jobs batch + download',
-              role: 'Buffers at most 10 IDs for 30 seconds, creates and polls one Jobs request, then fetches pre-signed trace payloads from the regional download host.',
-              reference: 'POST + GET /api/v2/flows/instances/jobs',
+              name: 'Bulk execution-history job',
+              role: 'Up to 10 execution IDs from topic events are submitted together as one asynchronous job, then that job is polled until complete.',
+              reference: 'POST /api/v2/flows/instances/jobs · GET …/jobs/{jobId}',
             },
             {
-              name: 'Postgres archive',
-              role: 'Atomically claims IDs, deduplicates notifications, and persists executions, projected sessions, flattened tool calls, and API-cost runs.',
-              reference: 'ava_executions · ava_sessions · ava_tool_calls · ingest_runs',
+              name: 'Per-execution downloads',
+              role: 'The completed job returns one result per execution. Successful results provide a pre-signed downloadUri containing the full trace.',
+              reference: 'job result entity → downloadUri',
             },
           ]}
         />

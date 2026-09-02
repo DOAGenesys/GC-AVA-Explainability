@@ -42,22 +42,22 @@ export default async function ToolsPage() {
 
       <div className="stack">
         <TechnicalAssets
-          summary="These metrics are derived exclusively from successfully archived Jobs traces; the page itself performs one Postgres aggregate read."
+          summary="Tool evidence comes from downloadable execution history returned by the Jobs API, not from conversation or bot-flow analytics."
           assets={[
             {
-              name: 'Execution-trace parser',
-              role: 'Finds AVA data-action calls and records their names, timestamps, inputs, outputs, and chosen success or failure path.',
-              reference: 'Jobs download → parseTrace()',
+              name: 'Notification pointer',
+              role: 'The flow topic supplies the execution ID needed to request the trace containing its data-action activity.',
+              reference: 'v2.flows.instances.flow.{id}',
             },
             {
-              name: 'Flattened tool evidence',
-              role: 'Stores one searchable row per recorded call while retaining the original trace as the source of truth.',
-              reference: 'ava_tool_calls',
+              name: 'Bulk Jobs request',
+              role: 'Retrieves histories asynchronously in groups of up to 10 execution IDs rather than making one Platform API request per execution.',
+              reference: 'POST /api/v2/flows/instances/jobs · GET …/jobs/{jobId}',
             },
             {
-              name: 'Capture-scoped aggregates',
-              role: 'Computes volume, failures, median latency, and 95th percentile only for executions observed by Live capture.',
-              reference: 'Postgres · last 7 days',
+              name: 'Execution-history payload',
+              role: 'The per-execution download records tool name, timing, inputs, outputs, and the success or failure path selected by the AVA.',
+              reference: 'job result entity → downloadUri',
             },
           ]}
         />

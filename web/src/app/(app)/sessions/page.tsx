@@ -45,22 +45,22 @@ export default async function SessionsPage() {
 
       <div className="stack">
         <TechnicalAssets
-          summary="This list joins session metadata with the retrieval state of the execution captured by Notifications and Jobs; it does not call Genesys when the page loads."
+          summary="Each Jobs-captured session starts with a flow notification and inherits the retrieval outcome returned for that notification’s execution ID."
           assets={[
             {
-              name: 'Session projection',
-              role: 'Combines historical session rows with sessions synthesized from newly archived Jobs traces.',
-              reference: 'ava_sessions + ava_executions',
+              name: 'Flow-instance event',
+              role: 'The notification identifies the execution, flow, and conversation that belong together before any history is requested.',
+              reference: 'v2.flows.instances.flow.{id}',
             },
             {
-              name: 'Retrieval fidelity',
-              role: 'ARCHIVED, NO_HISTORY, and retryable states come from the Jobs result and determine whether full trace evidence is available.',
-              reference: 'GET /api/v2/flows/instances/jobs/{jobId}',
+              name: 'Bulk Jobs request',
+              role: 'The execution ID can share one asynchronous request with up to nine others; polling returns an individual result for each ID.',
+              reference: 'POST /api/v2/flows/instances/jobs · GET …/jobs/{jobId}',
             },
             {
-              name: 'Live refresh',
-              role: 'Refreshes this server-rendered Postgres view every 10 seconds so captures completed in another tab appear without polling Genesys.',
-              reference: 'Next.js router.refresh()',
+              name: 'Per-execution outcome',
+              role: 'A downloadUri means full history is available; a confirmed 404 means NO_HISTORY. Jobs does not supply bot-session analytics classifications.',
+              reference: 'job result statusCode + downloadUri',
             },
           ]}
         />

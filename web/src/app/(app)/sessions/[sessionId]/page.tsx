@@ -53,26 +53,26 @@ export default async function SessionPage({ params }: { params: Promise<{ sessio
         <TechnicalAssets
           summary={
             trace
-              ? 'This view aligns the archived Jobs trace with its session and presents the exact evidence recorded during execution.'
-              : 'This view has session metadata, but no retrievable Jobs trace; unavailable evidence remains explicitly unknown.'
+              ? 'The flow notification identified this execution; its completed Jobs result supplied the detailed history shown below.'
+              : 'The flow notification identified this execution, but Genesys did not return a downloadable Jobs history for it.'
           }
           assets={[
             {
-              name: 'Archived execution payload',
+              name: 'Notification pointer',
+              role: 'Binds executionId, flowId, and conversationId at the moment the flow-instance event is emitted.',
+              reference: 'v2.flows.instances.flow.{id}',
+            },
+            {
+              name: 'Execution-history job',
               role: trace
-                ? 'The pre-signed Jobs download was parsed once at capture time and is now read from Postgres.'
-                : 'The Jobs retrieval state explains why execution-level evidence is not available.',
-              reference: 'ava_executions.parsed_trace',
+                ? 'The execution ID was submitted in a job of up to 10 IDs; its successful result returned a pre-signed downloadUri.'
+                : 'The individual job result explains why no downloadable history is available.',
+              reference: 'POST /api/v2/flows/instances/jobs · GET …/jobs/{jobId}',
             },
             {
-              name: 'Evidence-aligned timeline',
-              role: 'Orders AVA messages and data-action calls from the trace without inferring missing turns or outcomes.',
-              reference: 'buildSessionTimeline(turns, trace)',
-            },
-            {
-              name: 'Tool and flow trace',
-              role: 'Exposes recorded tool inputs, outputs, failure paths, state transitions, waits, and the Genesys truncation flag.',
-              reference: 'Jobs execution history',
+              name: 'Downloaded history',
+              role: 'Contains the ordered flow states, waits, transitions, nested AVA messages, data-action inputs and outputs, exit reason, and truncation flag.',
+              reference: 'job result entity → downloadUri',
             },
           ]}
         />

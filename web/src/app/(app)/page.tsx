@@ -45,22 +45,22 @@ export default async function DashboardPage() {
 
       <div className="stack">
         <TechnicalAssets
-          summary="This dashboard is a Postgres view of the event-driven capture pipeline; loading it does not call Genesys."
+          summary="A flow notification supplies the execution pointer; one asynchronous Jobs request can retrieve full histories for up to 10 such executions."
           assets={[
             {
-              name: 'Flow-instance notification',
-              role: 'Supplies the execution, flow, and conversation IDs directly—no discovery query.',
+              name: 'Notifications topic',
+              role: 'One concrete topic per flow emits executionId, flowId, and conversationId directly—no wildcard or discovery request.',
               reference: 'v2.flows.instances.flow.{id}',
             },
             {
-              name: 'Bulk Jobs retrieval',
-              role: 'Submits up to 10 execution IDs, polls the job until ready, then downloads each full trace.',
-              reference: 'POST + GET /api/v2/flows/instances/jobs',
+              name: 'Asynchronous Jobs API',
+              role: 'A single job accepts up to 10 event-supplied execution IDs; the job is then polled until its result list is ready.',
+              reference: 'POST /api/v2/flows/instances/jobs · GET …/jobs/{jobId}',
             },
             {
-              name: 'Capture archive',
-              role: 'Stores trace, tool, status, and per-batch cost records used by every metric below.',
-              reference: 'ava_executions · ava_tool_calls · ingest_runs',
+              name: 'Execution downloads',
+              role: 'Each successful job result contains a pre-signed downloadUri for that execution’s complete history, including AVA and tool evidence.',
+              reference: 'job result entity → downloadUri',
             },
           ]}
         />

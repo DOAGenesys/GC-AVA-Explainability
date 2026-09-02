@@ -34,22 +34,22 @@ export default async function CoveragePage() {
 
       <div className="stack">
         <TechnicalAssets
-          summary="Coverage is measured only inside the population of valid flow-instance notifications received while a browser channel was live."
+          summary="Coverage compares flow-instance events received through active notification topics with the individual outcomes returned by the bulk Jobs API."
           assets={[
             {
-              name: 'Observed population',
-              role: 'Each valid topic event contributes one deduplicated execution ID; executions outside the active WebSocket window are intentionally unknown.',
-              reference: 'v2.flows.instances.flow.{id}',
+              name: 'Notification scope',
+              role: 'A temporary channel listens to one explicit topic per selected flow. There is no wildcard, and events outside the channel lifetime are not observed.',
+              reference: 'POST /api/v2/notifications/channels · v2.flows.instances.flow.{id}',
             },
             {
-              name: 'Jobs outcome',
-              role: 'Classifies each observed execution as archived, confirmed NO_HISTORY, retryable failure, or truncated from the actual retrieval result.',
-              reference: 'POST + GET /api/v2/flows/instances/jobs',
+              name: 'Bulk Jobs outcomes',
+              role: 'One asynchronous job handles up to 10 observed IDs and returns a separate success, failure, statusCode, and downloadUri for each execution.',
+              reference: 'POST /api/v2/flows/instances/jobs · GET …/jobs/{jobId}',
             },
             {
-              name: 'Capture-scoped report',
-              role: 'Groups the stored execution statuses by flow without estimating organization-wide traffic.',
-              reference: 'ava_executions · ingest_runs',
+              name: 'History availability',
+              role: 'A successful download is a full trace; 404 is NO_HISTORY; transport or job failures remain retryable; the payload itself declares truncation.',
+              reference: 'job result + downloaded execution history',
             },
           ]}
         />

@@ -18,9 +18,9 @@ export function TechnicalAssets({
   assets: readonly TechnicalAsset[];
 }) {
   return (
-    <aside className="technical-assets" aria-label="Technical assets used by this section">
+    <aside className="technical-assets" aria-label="Genesys Cloud assets used by this section">
       <header>
-        <span>Under the hood</span>
+        <span>Genesys Cloud assets</span>
         <p>{summary}</p>
       </header>
       <div className="technical-asset-list">

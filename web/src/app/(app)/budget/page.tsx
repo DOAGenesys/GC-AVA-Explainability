@@ -61,27 +61,22 @@ export default async function BudgetPage() {
 
       <div className="stack">
         <TechnicalAssets
-          summary="Every capture batch carries its own measured API budget; this page reads those records rather than estimating cost from traffic."
+          summary="The capture path spends Platform API calls on one channel creation and asynchronous Jobs submit/poll requests; topic events and trace downloads are outside that count."
           assets={[
             {
               name: 'Channel creation',
-              role: 'Opening a temporary notification channel costs one Platform API call; WebSocket events and socket subscription messages do not.',
+              role: 'This is one individual Platform API request. Topic subscriptions are then sent over its WebSocket, and incoming events do not add API calls.',
               reference: 'POST /api/v2/notifications/channels',
             },
             {
-              name: 'Jobs accounting',
-              role: 'Counts submit and poll attempts, retries, and 429 responses. A full 10-ID batch has a two-call floor, or 0.2 calls per execution.',
-              reference: 'POST + GET /api/v2/flows/instances/jobs',
+              name: 'Bulk Jobs calls',
+              role: 'One submit carries up to 10 execution IDs. The same job is polled until complete, so a full batch starts at 0.2 Platform calls per execution with one poll.',
+              reference: 'POST /api/v2/flows/instances/jobs · GET …/jobs/{jobId}',
             },
             {
-              name: 'Download boundary',
-              role: 'Pre-signed trace downloads use the regional download host and are deliberately excluded from the Platform API allowance.',
+              name: 'Individual trace downloads',
+              role: 'Each successful job entity provides its own pre-signed downloadUri. Those regional-host requests do not consume the Platform API allowance.',
               reference: 'api-downloads.{region}',
-            },
-            {
-              name: 'Run ledger',
-              role: 'Persists duration, retrieved and no-history counts, rate limits, failures, and calls per execution for every batch.',
-              reference: 'ingest_runs · kind=capture',
             },
           ]}
         />
