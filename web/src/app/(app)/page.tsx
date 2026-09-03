@@ -93,12 +93,6 @@ export default async function DashboardPage() {
             value={metrics.apiCalls24h.toLocaleString()}
             note="Downloads excluded from API allowance"
           />
-          <Kpi
-            label="API calls / execution"
-            value={metrics.apiCallsPerExecution?.toFixed(3) ?? '—'}
-            note="0.2 at a full batch of ten"
-            accent={metrics.apiCallsPerExecution != null && metrics.apiCallsPerExecution > 0.5}
-          />
         </div>
 
         <div className="capture-overview">
