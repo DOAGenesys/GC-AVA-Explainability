@@ -676,6 +676,20 @@ export async function getCaptureCoverage(days: number): Promise<CaptureCoverageR
   };
 }
 
+/** Which of these conversations already have a full execution trace in this app's archive. */
+export async function listArchivedConversationIds(conversationIds: string[]): Promise<Set<string>> {
+  if (conversationIds.length === 0) return new Set();
+  const { rows } = await sql<{ conversation_id: string }>`
+    SELECT DISTINCT conversation_id
+    FROM ava_executions
+    WHERE retrieval_status = 'ARCHIVED'
+      AND conversation_id IN (
+        SELECT jsonb_array_elements_text(${JSON.stringify(conversationIds)}::jsonb)
+      )
+  `;
+  return new Set(rows.map((row) => row.conversation_id));
+}
+
 export interface CaptureRunRow {
   id: number;
   kind: string;

@@ -21,6 +21,9 @@
     "check": "npm run format:check && npm run lint:strict && npm run typecheck && npm run test"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1156.0",
+    "@aws-sdk/util-dynamodb": "^3.996.9",
+    "@vercel/oidc-aws-credentials-provider": "^3.3.15",
     "@vercel/postgres": "^0.10.0",
     "next": "^16.3.3",
     "react": "^19.2.8",

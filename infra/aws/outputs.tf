@@ -45,6 +45,21 @@ output "execution_history_rule_pattern" {
   value       = aws_cloudwatch_event_rule.execution_history.event_pattern
 }
 
+output "turns_table" {
+  description = "Reporting Turns sessions and per-flow sweep watermarks."
+  value       = aws_dynamodb_table.turns.name
+}
+
+output "turns_sweep_function" {
+  description = "Scheduled Reporting Turns sweep. Invoke it by hand to backfill immediately."
+  value       = aws_lambda_function.turns_sweep.function_name
+}
+
+output "web_reader_role_arn" {
+  description = "Role the Vercel web app assumes through OIDC. Set it as AVA_TURNS_ROLE_ARN. Null when vercel_team_slug is empty."
+  value       = var.vercel_team_slug != "" ? aws_iam_role.web_reader[0].arn : null
+}
+
 output "ava_flow_filter_count" {
   description = "Number of flow ids in the rule filter. 0 means every flow-instance event is accepted."
   value       = length(var.ava_flow_ids)

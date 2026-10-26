@@ -10,7 +10,7 @@ The repository contains two things — a **product**, and the **evidence** that 
 | **[`web/`](web/README.md)** | **The application.** A Next.js workspace that captures selected AVA flow executions in real time and retrieves full traces through the batched Jobs API. |
 | [`docs/validation-log.md`](docs/validation-log.md) | The measurement record. Every claim the application relies on, with the probe that established it. |
 | [`genesys-cloud-ava-explainability-at-scale-architecture.md`](genesys-cloud-ava-explainability-at-scale-architecture.md) | The original event-driven architecture, and where reality diverged from it. |
-| `collector/`, `infra/` | An AWS EventBridge → SQS → Lambda → S3 prototype. Superseded, retained as evidence. |
+| `collector/`, `infra/` | The always-on AWS backend: an EventBridge → SQS → Lambda collector that archives execution history through Jobs, and an hourly Reporting Turns sweep that persists every AVA session, which the web app reads through Vercel OIDC. |
 | `harness/` | Python probes used to measure the platform ([`harness/README.md`](harness/README.md)). |
 
 **Start at [`web/README.md`](web/README.md)** for what the product does and how to run it.
@@ -38,9 +38,17 @@ responds, produce a session and a transcript but no execution history at all —
 answers 404 for those ids **permanently**, not transiently. On the flow used for validation, that
 was **6 of 7 sessions**.
 
-The current application therefore uses the notification as a zero-discovery trigger and batches
-the supplied execution IDs ten at a time for full-history retrieval. The trade-off is explicit:
-interactive WebSocket capture observes selected flows only while the browser page remains open.
+**Reporting Turns now covers what execution history cannot.** Since the September and October 2026
+releases, each AVA turn in the Bot Flow Reporting Turns API carries its tool calls (name, type,
+status, latency) and the AVA's name and version. Measured on a session that never exited: all 6
+turns and all 4 tool calls were returned. Tool inputs and outputs remain exclusive to execution
+history, and retention is about 10 days.
+
+The application therefore uses the notification as a zero-discovery trigger and batches the
+supplied execution IDs ten at a time for full-history retrieval. Interactive WebSocket capture
+observes selected flows only while the browser page remains open, so the AWS stack provides the
+persistent, server-to-server path: the EventBridge collector archives every execution history, and
+an hourly sweep stores every AVA session's turns and tool outcomes before retention drops them.
 
 ## Validation environment
 
@@ -48,25 +56,27 @@ interactive WebSocket capture observes selected flows only while the browser pag
 |---|---|
 | Genesys org | `<GENESYS_ORG_NAME>` / `<GENESYS_ORG_ID>` |
 | Genesys region | `prod-euc1` (Frankfurt), API `https://api.mypurecloud.de` |
-| AWS account / region | `123456789012` / `eu-central-1` (prototype only) |
+| AWS account / region | `123456789012` / `eu-central-1` |
 
 Genesys credentials are read at run time from the MCP config and never enter this repository. AWS
 credentials are resolved by the `aws` skill and never enter the repository, the shell, or Terraform
 variables.
 
-## The superseded prototype
+## The AWS backend
 
-`collector/` and `infra/` implement the original architecture: a Genesys EventBridge integration, a
-partner event bus, SQS with a dead-letter queue, a collector Lambda writing to a versioned S3
-Bronze bucket and a DynamoDB manifest, with alarms and cost controls. It works, and the validation
-gates were answered against it.
+`collector/` and `infra/` implement the server-to-server side: a Genesys EventBridge integration, a
+partner event bus, SQS with a dead-letter queue, and a collector Lambda that retrieves execution
+history through Jobs (ten ids per job) into a versioned S3 Bronze bucket and a DynamoDB manifest,
+with alarms and cost controls. The validation gates were answered against it.
 
-It is retained because the evidence behind every finding above was collected through it, and
-because the runbook and the gate record are only meaningful alongside the code they describe. It is
-not the recommended deployment path.
+`infra/aws/turns.tf` adds the Reporting Turns sweep (`collector/turns_sweep.py`): hourly, per AVA
+flow, from a watermark, into `bronze/turns/` and the `ava-explain-turns` table, plus the Vercel
+OIDC provider and the read-only role the web app assumes. Genesys client credentials live in
+Secrets Manager (`ava-explain/genesys-oauth`), written by `scripts/push-genesys-credentials-to-aws.py`,
+which prints only lengths and the ARN. Collector tests: `python -m unittest discover -s collector/tests`.
 
 > [!IMPORTANT]
-> Standing the prototype back up opens an org-wide firehose. The notification topic's `{id}` is not
+> The EventBridge collector receives an org-wide firehose. The notification topic's `{id}` is not
 > parameterised, so every Architect flow execution in the shared presales org is delivered to AWS.
 > AWS-side rules control what is *stored*, not what *arrives*.
 >

@@ -270,7 +270,7 @@ resource "aws_cloudwatch_log_resource_policy" "raw_events" {
 data "archive_file" "collector" {
   type        = "zip"
   source_dir  = "${path.module}/../../collector"
-  excludes    = ["__pycache__"]
+  excludes    = ["__pycache__", "**/__pycache__/**", "tests/**"]
   output_path = "${path.module}/build/collector.zip"
 }
 
@@ -501,9 +501,16 @@ resource "aws_ce_anomaly_monitor" "stack" {
   monitor_type      = "CUSTOM"
   monitor_dimension = null
 
+  # Written in the exact shape Cost Explorer returns - the "user:" tag prefix and the explicit
+  # nulls - because any difference forces a replacement of the monitor on every plan.
   monitor_specification = jsonencode({
+    And            = null
+    CostCategories = null
+    Dimensions     = null
+    Not            = null
+    Or             = null
     Tags = {
-      Key          = "Project"
+      Key          = "user:Project"
       Values       = ["GC-AVA-Explainability"]
       MatchOptions = ["EQUALS"]
     }

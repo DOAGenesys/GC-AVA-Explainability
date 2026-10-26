@@ -65,6 +65,8 @@ number it reports means anything (see "Two measurement defects" below).
 | AWS | account `123456789012`, `eu-central-1`, 25 resources |
 | Bronze bucket | `ava-explain-bronze-123456789012-eu-central-1` |
 | Manifest | `ava-explain-manifest` |
+| Turn sweep | `ava-explain-turns-sweep`, hourly, into `ava-explain-turns` (since 2026-10-26) |
+| Web reader | `ava-explain-web-reader`, assumed by the Vercel production deployment through OIDC |
 | Flow filter | none - unfiltered capture during discovery |
 | Discovery logging | on, catch-all rule to `/aws/events/ava-explain/raw`, 7-day retention |
 
@@ -980,16 +982,47 @@ Findings that contradict or refine the source document, in descending order of c
 
 ---
 
+## Reporting Turns re-baseline, 26 October 2026 - PASS, and now swept server-side
+
+Reproduce: `python harness\probe_turn_metadata.py --flow-id <botFlowId> --days 2` (prints field
+paths, counts and enum values only, never content).
+
+One synthetic session was driven on the FS-70118 flow with the documented Monday script. It called
+four tools and, like every session on that flow, never reached the flow's exit, so it has no
+execution history and emitted no notification. Reporting Turns returned all of it:
+
+| Measured | Result |
+|---|---|
+| turns returned | 6 of 6 |
+| `toolCalls[]` | 4 of 4 calls, each with `toolName`, `toolType` (`DataAction`), `toolId`, `targetId`, `status` (`Success`), `origin` (`AvaTool`), `latencyMs`, `dateInvoked` |
+| `askAction.agentDetails` | `agentId`, `agentName`, `agentVersion` on every AVA turn |
+| `executionFrameId`, `botFlowInvocationEvents[].type` | present |
+| declared but not yet observed | `sessionEndDetails`, `ReportingTurnGuardrailEvent`, `ReportingTurnKnowledgeMetadata`, `askActionResult = GuardrailsViolation` - this flow has no guardrail or knowledge tool, and the session never ended |
+| tool inputs and outputs | **absent** - still exclusive to execution history |
+
+This reverses the reason the web app dropped Reporting Turns on 2 September: the endpoint now
+proves which tools ran, in which turn, with what outcome, for sessions the Jobs path can never see.
+
+It is now persisted without a browser. `infra/aws/turns.tf` adds an hourly EventBridge schedule
+running `collector/turns_sweep.py`, which lists every flow with `agenticVirtualAgentEnabled`, reads
+`divisions/reportingturns` from a per-flow watermark minus a two-hour overlap, writes raw pages to
+`bronze/turns/` and merges turns per session into DynamoDB `ava-explain-turns`. A flow's
+watermark advances only when its pages were read to the end. First run, backfilling the ~10 day
+retention window: 68 flows swept, 0 failed, one Reporting Turns page per flow plus the flow listing, 14 turns
+in 3 sessions, 4 tool calls.
+
+The same apply upgraded the EventBridge collector to inline Jobs retrieval at 10 ids per job
+(SQS batch 5 -> 10) with credentials from Secrets Manager `ava-explain/genesys-oauth`, so
+execution history no longer depends on running `recover_jobs.py` by hand.
+
 ## Remaining work
 
 | Item | Why it is still open |
 |---|---|
-| Deliverable C - purpose-built test AVA | still the largest gap: 5 of 11 scenarios unobserved - Data Action timeout, AVA guardrail block, knowledge lookup, AVA containment, voice - and the real truncation ceiling is unknown |
-| Add a flow-exit check to onboarding | an AVA whose parent flow loops back to `Wait for Input` with no exit action produces no history at all, and nothing downstream can detect the difference between that and a quiet flow |
-| Re-baseline the Bot Flow Reporting Turns API after 31 Aug 2026 | the turn-level metadata release is the only known route to the never-terminated executions the pipeline cannot see, and to guardrail and knowledge scenarios gate 10 still lacks |
-| Promote `recover_jobs.py` to a scheduled Lambda | it is the only path that stores execution history, currently run by hand |
+| Deliverable C - purpose-built test AVA | still the largest gap: 5 of 11 scenarios unobserved - Data Action timeout, AVA guardrail block, knowledge lookup, AVA containment, voice - and the real truncation ceiling is unknown; the sweep is ready to record guardrail and knowledge metadata the moment such a session runs |
+| Add a flow-exit check to onboarding | an AVA whose parent flow loops back to `Wait for Input` with no exit action produces no history at all; the turn sweep now records those sessions, but without tool inputs and outputs |
+| Replace the sweep and collector OAuth client with a least-privilege one | `ava-explain/genesys-oauth` currently holds the harness client, which has far more permission than flow listing, Reporting Turns and Jobs need |
 | Seed `RECOVERY_REQUIRED` rows from reconciliation | the manual path now exists (`recover_jobs.py --execution-id`); wiring reconciliation's output into it automatically does not |
-| Make the collector batch Jobs at 10 | the single largest efficiency win available: 0.2 API calls per execution instead of ~2, measured, no platform change needed |
 | Establish the rate-limit domain under load | no `inin-ratelimit-*` headers were returned on the endpoints probed, so sustainable throughput is still un-measured |
 | Gate 7 under deliberate fault injection | duplicates and ordering will not appear from volume alone |
 | Voice AVA coverage | no voice execution captured; `FelixVoiceBotFlow` and `NN Insurance Voice Bot` are candidates |

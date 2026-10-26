@@ -2516,6 +2516,23 @@ code {
   margin-top: 12px;
 }
 
+.turn-tool-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+.turn-tool-facts dt {
+  color: var(--ink-muted);
+}
+
+.turn-tool-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .tool-path {
   margin-top: 8px;
   color: var(--ink-muted);

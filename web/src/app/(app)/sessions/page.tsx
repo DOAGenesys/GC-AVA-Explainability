@@ -12,14 +12,26 @@ import {
   outcomeTone,
   retrievalTone,
 } from '@/components/ui';
+import { mergeTurnSessions } from '@/lib/turn-evidence';
 import { listSessions } from '@/server/db';
+import { listTurnSessions } from '@/server/turns/store';
 
 export const dynamic = 'force-dynamic';
 
 const WINDOW_DAYS = 7;
+const SESSION_LIMIT = 300;
 
 export default async function SessionsPage() {
-  const sessions = await listSessions(WINDOW_DAYS, 300);
+  const [stored, turnSessions] = await Promise.all([
+    listSessions(WINDOW_DAYS, SESSION_LIMIT),
+    listTurnSessions(WINDOW_DAYS, SESSION_LIMIT),
+  ]);
+  const sessions = mergeTurnSessions(
+    stored,
+    turnSessions.state === 'ready' ? turnSessions.data : [],
+    SESSION_LIMIT,
+  );
+  const turnOnly = sessions.filter((session) => session.source === 'turns').length;
 
   return (
     <>
@@ -29,8 +41,9 @@ export default async function SessionsPage() {
         description={
           <>
             AVA sessions observed in the last {WINDOW_DAYS} days. Live captures become available
-            here as soon as their Jobs retrieval finishes; older analytics sessions remain visible
-            alongside them.
+            here as soon as their Jobs retrieval finishes; sessions recorded by the hourly
+            server-side turn sweep appear even when no browser was capturing and Genesys kept no
+            execution history.
           </>
         }
         action={
@@ -45,7 +58,7 @@ export default async function SessionsPage() {
 
       <div className="stack">
         <TechnicalAssets
-          summary="Each Jobs-captured session starts with a flow notification and inherits the retrieval outcome returned for that notification’s execution ID."
+          summary="Jobs-captured sessions start with a flow notification and inherit the retrieval outcome for that execution ID. Turn-metadata sessions come from the bot flow's reporting turns, which record every AVA session whether or not it reached the flow's exit."
           assets={[
             {
               name: 'Flow-instance event',
@@ -62,10 +75,30 @@ export default async function SessionsPage() {
               role: 'A downloadUri means full history is available; a confirmed 404 means NO_HISTORY. Jobs does not supply bot-session analytics classifications.',
               reference: 'job result statusCode + downloadUri',
             },
+            {
+              name: 'Bot flow reporting turns',
+              role: 'Each AVA turn with the customer input, the AVA prompts, the AVA name and version, and every tool call with its status and latency. Tool inputs and outputs are not included.',
+              reference: 'GET /api/v2/analytics/botflows/{botFlowId}/divisions/reportingturns',
+            },
           ]}
         />
 
-        <Card>
+        {turnSessions.state === 'unavailable' ? (
+          <div className="timeline-notice is-warning">
+            <strong>Turn sweep sessions are temporarily unavailable.</strong>
+            Sessions recorded only by the server-side sweep are missing from this list until the
+            store can be reached again.
+          </div>
+        ) : null}
+
+        <Card
+          title="AVA sessions"
+          subtitle={
+            turnSessions.state === 'ready'
+              ? `${sessions.length} sessions · ${turnOnly} known only from reporting turns`
+              : `${sessions.length} sessions`
+          }
+        >
           {sessions.length > 0 ? (
             <DataTable label="AVA sessions">
               <table>
@@ -98,6 +131,8 @@ export default async function SessionsPage() {
                       <td>
                         {session.source === 'capture' ? (
                           <Pill tone="neutral">Jobs capture</Pill>
+                        ) : session.source === 'turns' ? (
+                          <Pill tone="neutral">Turn sweep</Pill>
                         ) : (
                           (session.botResultCategory ?? '—')
                         )}
@@ -107,6 +142,8 @@ export default async function SessionsPage() {
                       <td>
                         {session.retrievalStatus === 'ARCHIVED' ? (
                           <Pill tone="good">Full trace</Pill>
+                        ) : session.turnEvidence ? (
+                          <Pill tone="info">Turn metadata</Pill>
                         ) : session.retrievalStatus === 'NO_HISTORY' ? (
                           <Pill tone="warn">No history</Pill>
                         ) : session.retrievalStatus ? (

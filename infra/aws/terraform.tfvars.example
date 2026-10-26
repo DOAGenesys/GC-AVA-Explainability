@@ -29,6 +29,15 @@ enable_discovery_logging = true
 #   $r.avaFlowIds
 ava_flow_ids = []
 
+# ARN of the Secrets Manager secret holding {"clientId", "clientSecret"} for the Genesys OAuth
+# client. Create it with scripts\push-genesys-credentials-to-aws.py, which prints only the ARN.
+genesys_credentials_secret_arn = "arn:aws:secretsmanager:eu-central-1:<ACCOUNT_ID>:secret:ava-explain/genesys-oauth-<SUFFIX>"
+
+# The web app reads the Reporting Turns sweep through Vercel OIDC federation. Empty skips the
+# OIDC provider and reader role.
+vercel_team_slug    = "<YOUR_VERCEL_TEAM_SLUG>"
+vercel_project_name = "gc-ava-explainability"
+
 # Cost guardrails. Add an address to make the budget and anomaly monitor actually notify;
 # without one they are created but silent.
 monthly_budget_usd  = 10

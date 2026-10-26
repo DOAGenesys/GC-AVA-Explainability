@@ -105,6 +105,26 @@ For an always-on production collector, use the same event-pointer and ten-ID Job
 behind a durable transport such as EventBridge. The browser implementation intentionally optimizes
 interactive investigation rather than claiming background durability.
 
+## Server-side turn sweep
+
+Two gaps remain even with a durable EventBridge collector: an execution that never reaches its
+flow's exit emits no notification and has no history, and the Genesys analytics retention is
+about ten days. The AWS stack (`infra/aws/turns.tf`) closes both with an hourly sweep of
+`GET /api/v2/analytics/botflows/{botFlowId}/divisions/reportingturns` for every flow whose
+`agenticVirtualAgentEnabled` flag is set. Raw pages go to S3 and merged sessions to DynamoDB, from a
+per-flow watermark with overlap, so a failed run is recovered by the next one.
+
+Since the September and October 2026 releases each AVA turn carries its tool calls (name, type,
+status, latency, origin, target) and the AVA's name and version. The sweep therefore records which
+tools ran, in which turn, and how they ended, for every session, including those without
+execution history. Tool inputs and outputs still exist only in execution history.
+
+The web app reads the sweep with short-lived credentials from Vercel OIDC federation; the IAM role
+it assumes can only `Query` and `GetItem` the turns table. The Sessions page merges sweep sessions
+with stored ones (a session known only from reporting turns is labelled **Turn metadata**), the
+session page falls back to the turn conversation when no trace exists, and Capture coverage shows
+the sweep's per-flow health. Without the three `AVA_TURNS_*` variables the app runs unchanged.
+
 ## Security
 
 - Genesys access and refresh tokens remain in an AES-256-GCM encrypted HttpOnly cookie.
@@ -129,6 +149,9 @@ Copy `.env.example` to `.env.local`:
 | `GENESYS_REGION`                | No       | Default region shown at sign-in.             |
 | `JOBS_MAX_IDS`                  | No       | Jobs ceiling; default and maximum is 10.     |
 | `SESSION_TTL_MINUTES`           | No       | Signed-in session lifetime; default 720.     |
+| `AVA_TURNS_TABLE`               | No       | DynamoDB table written by the turn sweep.    |
+| `AVA_TURNS_AWS_REGION`          | No       | Region of that table.                        |
+| `AVA_TURNS_ROLE_ARN`            | No       | Read-only role assumed through Vercel OIDC.  |
 | `NEXT_PUBLIC_ENVIRONMENT_LABEL` | No       | Sidebar environment label.                   |
 | `NEXT_PUBLIC_APP_VERSION`       | No       | Sidebar version label.                       |
 
@@ -165,6 +188,9 @@ src/server/capture/                      Deduplication, retrieval and persistenc
 src/server/genesys/ava.ts               Jobs API and execution trace parser
 src/server/db/index.ts                   Archive writes, capture metrics and reads
 src/server/db/schema.sql                 Postgres schema
+src/server/turns/store.ts                Turn sweep reader (DynamoDB via Vercel OIDC)
+src/lib/turn-evidence.ts                 Turn sweep parsing, session merge, coverage totals
+src/components/turn-evidence.tsx         Conversation view built from reporting turns
 ```
 
 ## Verification

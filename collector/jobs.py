@@ -127,6 +127,12 @@ def _api(path: str, *, method: str = "GET", payload: Any = None) -> tuple[int, d
     raise AssertionError("unreachable")
 
 
+def api_get(path: str) -> tuple[int, bytes]:
+    """GET a Platform API path with the collector's cached token and 429 handling."""
+    status, _, raw = _api(path)
+    return status, raw
+
+
 # --------------------------------------------------------------------------- jobs
 
 

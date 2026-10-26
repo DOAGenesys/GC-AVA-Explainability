@@ -182,6 +182,56 @@ variable "budget_alert_emails" {
   default     = []
 }
 
+# ------------------------------------------------------------------ reporting turns sweep
+
+variable "enable_turns_sweep" {
+  description = "Run the scheduled Reporting Turns sweep. The Lambda and table exist either way."
+  type        = bool
+  default     = true
+}
+
+variable "turns_sweep_schedule" {
+  description = <<-EOT
+    How often the sweep runs. Hourly keeps the window small and leaves days of slack before the
+    platform's ~10 day Reporting Turns retention. Each run costs roughly one API call per AVA flow
+    plus one per 250 turns.
+  EOT
+  type        = string
+  default     = "rate(1 hour)"
+}
+
+variable "turns_sweep_timeout_seconds" {
+  description = "Sweep timeout. Flows not reached in time keep their watermark and are picked up next run."
+  type        = number
+  default     = 300
+}
+
+variable "turns_extra_flow_ids" {
+  description = "Flow ids to sweep in addition to every flow whose agenticVirtualAgentEnabled flag is set."
+  type        = list(string)
+  default     = []
+}
+
+# ------------------------------------------------------------------ web app read access
+
+variable "vercel_team_slug" {
+  description = "Vercel team slug that issues the web app's OIDC tokens. Empty skips the OIDC provider and reader role."
+  type        = string
+  default     = ""
+}
+
+variable "vercel_project_name" {
+  description = "Vercel project allowed to assume the reader role."
+  type        = string
+  default     = "gc-ava-explainability"
+}
+
+variable "vercel_environments" {
+  description = "Vercel environments allowed to assume the reader role."
+  type        = list(string)
+  default     = ["production"]
+}
+
 variable "enable_anomaly_detection" {
   description = "AWS Cost Anomaly Detection on this stack's tagged spend. Free, and catches a runaway firehose faster than a monthly budget can."
   type        = bool

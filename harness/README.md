@@ -27,6 +27,7 @@ pull_samples.py      S3 Bronze envelopes    -> artifacts/samples/<executionId>.j
 | `jobs_compare.py` | 1, 2, 3 | whether the notification `executionId` is accepted verbatim in `ids[]`, and whether any expand variant returns data the direct download lacks |
 | `semantic_diff.py` | 1 | the directional field-level comparison, and the actual PASS/FAIL for gate 1 |
 | `load_probe.py` | 6 | highest clean concurrency, and whether downloads share the Platform API rate-limit domain |
+| `probe_turn_metadata.py` | 10 | which turn-level fields Bot Flow Reporting Turns returns (tool calls, AVA details, guardrail and knowledge metadata); prints field paths, counts and enum values only, never conversation content |
 
 Gates 8 and 9 are answered by the PowerShell probes in `scripts/`, not here:
 `gc-probe-topic-transports.ps1` and `gc-build-ava-registry.ps1`.
