@@ -40,7 +40,7 @@ def wanted_ids(args: argparse.Namespace) -> list[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--bucket", default="ava-explain-bronze-123456789012-eu-central-1")
+    ap.add_argument("--bucket", help="defaults to $BRONZE_BUCKET, else derived from the caller's account")
     ap.add_argument("--prefix", default="bronze/history-jobs/")
     ap.add_argument("--execution-id", action="append")
     ap.add_argument("--latest-batch", action="store_true")
@@ -54,6 +54,7 @@ def main() -> int:
         "executionId, so they collide by default)",
     )
     args = ap.parse_args()
+    args.bucket = gcapi.bronze_bucket(args.bucket)
 
     s3 = boto3.client("s3")
     out_dir = Path(args.out)

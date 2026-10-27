@@ -4,7 +4,7 @@
 **Org ID:** `<GENESYS_ORG_ID>`
 **Habitat / region:** `prod-euc1` (AWS eu-central-1, Frankfurt)
 **Platform API host:** `https://api.mypurecloud.de`
-**Credential source:** `C:\Users\<user>\cursor\AVA skills MCP Cursor files\<org-folder>\mcp.json`
+**Credential source:** `%USERPROFILE%\cursor\AVA skills MCP Cursor files\<org-folder>\mcp.json` (override with `GENESYS_MCP_CONFIG`)
 
 All findings below were probed live against the org, read-only. Nothing has been changed.
 Reproduce with `scripts\gc-readiness-probe.ps1`, `scripts\gc-probe-details.ps1`, `scripts\gc-probe-topic-transports.ps1`.

@@ -6,9 +6,10 @@ Dot-source it:  . .\scripts\load-genesys-env.ps1
 #>
 [CmdletBinding()]
 param(
-    [string]$McpConfig = "C:\Users\<user>\cursor\AVA skills MCP Cursor files\<org-folder>\mcp.json",
+    [string]$McpConfig = $env:GENESYS_MCP_CONFIG,
     [string]$ServerName = "ava-harness"
 )
+if (-not $McpConfig) { throw "GENESYS_MCP_CONFIG is not set: point it at the org's mcp.json, or pass -McpConfig" }
 
 $ErrorActionPreference = "Stop"
 

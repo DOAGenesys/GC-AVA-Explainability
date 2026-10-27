@@ -68,11 +68,20 @@ an hourly sweep stores every AVA session's turns and tool outcomes before retent
 
 | | |
 |---|---|
-| Genesys org | `<GENESYS_ORG_NAME>` / `<GENESYS_ORG_ID>` |
+| Genesys org | A Genesys Cloud demo org (org id and name withheld) |
 | Genesys region | `prod-euc1` (Frankfurt), API `https://api.mypurecloud.de` |
-| AWS account / region | `123456789012` / `eu-central-1` |
+| AWS account / region | A dedicated AWS account (id withheld) / `eu-central-1` |
 
-Genesys credentials are read at run time from the MCP config and never enter this repository. AWS
+Org ids, account ids and resource ids in this repository are placeholders or anonymised values.
+Supply your own through `terraform.tfvars` (see the `*.tfvars.example` files) and these environment
+variables:
+
+| Variable | Used by |
+|---|---|
+| `GENESYS_MCP_CONFIG` | Path to the `mcp.json` holding the org's `ava-harness` entry, read by `harness/` and `scripts/` |
+| `GENESYS_ORG_ID` | `scripts/pipeline-status.ps1` and `scripts/wait-for-partner-source.ps1` |
+
+Genesys credentials are read at run time from that MCP config and never enter this repository. AWS
 credentials are resolved by the `aws` skill and never enter the repository, the shell, or Terraform
 variables.
 

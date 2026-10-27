@@ -9,9 +9,11 @@ Read-only.
 #>
 [CmdletBinding()]
 param(
-    [string]$McpConfig = "C:\Users\<user>\cursor\AVA skills MCP Cursor files\<org-folder>\mcp.json",
-    [string]$ServerName = "ava-harness"
+    [string]$McpConfig = $env:GENESYS_MCP_CONFIG,
+    [string]$ServerName = "ava-harness",
+    [string[]]$IntegrationIds = @()
 )
+if (-not $McpConfig) { throw "GENESYS_MCP_CONFIG is not set: point it at the org's mcp.json, or pass -McpConfig" }
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -67,7 +69,7 @@ Write-Host ""
 
 # ============ B. existing EventBridge integrations ============
 Write-Host "=== B. Existing EventBridge integrations ==="
-foreach ($id in @("189d7bf2-96f8-5cce-8514-b4800f9492ab", "99b74675-75d1-5c49-bcb8-23b1c86f039e")) {
+foreach ($id in $IntegrationIds) {
     Write-Host "  --- integration $id ---"
     $i = Try-Api GET "/api/v2/integrations/$id"
     if ($i.ok) {

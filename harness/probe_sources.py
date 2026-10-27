@@ -16,7 +16,7 @@ Three questions:
    cost feeds directly into the cost model.
 
 Reproduce:
-    python harness/probe_sources.py [--flow-id <botFlowId>]
+    python harness/probe_sources.py --flow-id <botFlowId>
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ INTERESTING = re.compile(r"agentic|\bava\b|bot|flow|guardrail|tool|knowledge", r
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--flow-id", default="56155fa0-92cd-574b-b7cf-0fafad91fd2f")
+    ap.add_argument("--flow-id", required=True)
     args = ap.parse_args()
 
     client = gcapi.Client(gcapi.load_org_config())

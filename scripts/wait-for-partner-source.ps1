@@ -8,11 +8,12 @@ Credentials come from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_REGION.
 #>
 [CmdletBinding()]
 param(
-    [string]$OrgId = "<GENESYS_ORG_ID>",
+    [string]$OrgId = $env:GENESYS_ORG_ID,
     [string]$Suffix = "do-eventbridge-ava-explain",
     [string]$Region = $env:AWS_REGION,
     [int]$TimeoutSeconds = 900
 )
+if (-not $OrgId) { throw "GENESYS_ORG_ID is not set: export the Genesys org id, or pass -OrgId" }
 
 $ErrorActionPreference = "Stop"
 

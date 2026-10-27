@@ -33,9 +33,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ARTIFACTS = REPO_ROOT / "artifacts"
 
-DEFAULT_MCP_CONFIG = Path(
-    r"C:\Users\<user>\cursor\AVA skills MCP Cursor files\<org-folder>\mcp.json"
-)
+DEFAULT_MCP_CONFIG = os.environ.get("GENESYS_MCP_CONFIG")
 DEFAULT_CA_BUNDLE = Path.home() / ".cursor" / "certs" / "windows-enterprise-ca-bundle.pem"
 
 HABITAT_TO_API_HOST = {
@@ -86,6 +84,19 @@ def ssl_context(ca_bundle: str | None = None) -> ssl.SSLContext:
 # ------------------------------------------------------------------------ config
 
 
+def bronze_bucket(explicit: str | None = None) -> str:
+    """The stack's Bronze bucket, named by infra/aws as ava-explain-bronze-<account>-<region>."""
+    if explicit:
+        return explicit
+    if os.environ.get("BRONZE_BUCKET"):
+        return os.environ["BRONZE_BUCKET"]
+    import boto3
+
+    session = boto3.session.Session()
+    account = session.client("sts").get_caller_identity()["Account"]
+    return f"ava-explain-bronze-{account}-{session.region_name}"
+
+
 @dataclass
 class OrgConfig:
     client_id: str
@@ -106,8 +117,10 @@ class OrgConfig:
 
 
 def load_org_config(
-    mcp_config: str | Path = DEFAULT_MCP_CONFIG, server_name: str = "ava-harness"
+    mcp_config: str | Path | None = DEFAULT_MCP_CONFIG, server_name: str = "ava-harness"
 ) -> OrgConfig:
+    if not mcp_config:
+        raise SystemExit("GENESYS_MCP_CONFIG is not set: point it at the org's mcp.json")
     path = Path(mcp_config)
     if not path.is_file():
         raise SystemExit(f"MCP config not found: {path}")

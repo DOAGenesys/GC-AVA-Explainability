@@ -24,12 +24,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
-DEFAULT_MCP_CONFIG = Path(
-    r"C:\Users\<user>\cursor\AVA skills MCP Cursor files\<org-folder>\mcp.json"
-)
+DEFAULT_MCP_CONFIG = os.environ.get("GENESYS_MCP_CONFIG")
 DEFAULT_SECRET_NAME = "ava-explain/genesys-oauth"
 CLIENT_ID_KEY = "GENESYS_CLIENT_ID"
 CLIENT_SECRET_KEY = "GENESYS_CLIENT_SECRET"
@@ -102,6 +101,9 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        if args.mcp_config is None:
+            print_scrubbed("  GENESYS_MCP_CONFIG is not set and --mcp-config was not given")
+            return 1
         if not args.mcp_config.is_file():
             print_scrubbed("  mcp config not found")
             return 1

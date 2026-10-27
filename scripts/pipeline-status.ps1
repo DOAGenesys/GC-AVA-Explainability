@@ -15,11 +15,12 @@ Run through the aws skill so credentials stay out of this shell:
 [CmdletBinding()]
 param(
     [string]$NamePrefix = "ava-explain",
-    [string]$OrgId = "<GENESYS_ORG_ID>",
+    [string]$OrgId = $env:GENESYS_ORG_ID,
     [string]$Suffix = "do-eventbridge-ava-explain",
     [string]$Region = $env:AWS_REGION,
     [int]$LookbackMinutes = 60
 )
+if (-not $OrgId) { throw "GENESYS_ORG_ID is not set: export the Genesys org id, or pass -OrgId" }
 
 $ErrorActionPreference = "Stop"
 

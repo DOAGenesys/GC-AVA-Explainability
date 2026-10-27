@@ -36,3 +36,37 @@ web/.next/
 # Lambda build output
 build/
 *.zip
+
+# --- secrets (never commit) ---
+!.env.template
+!.env.sample
+.envrc
+*.env
+.dev.vars
+.secrets/
+secrets.*
+*.secret
+*.secrets
+credentials*.json
+service-account*.json
+client_secret*.json
+token.json
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.ppk
+id_rsa*
+id_ed25519*
+*.kdbx
+.npmrc
+.pypirc
+.netrc
+*.tfvars.json
+*.auto.tfvars
+terraform.tfstate*
+.vercel/
+.cursor/mcp.json
+.vscode/mcp.json
+local.settings.json
+*.log

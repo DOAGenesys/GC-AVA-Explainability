@@ -136,7 +136,7 @@ def fetch_single(client: gcapi.Client, execution_id: str, timeout_s: int) -> byt
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--table", default="ava-explain-manifest")
-    ap.add_argument("--bucket", default="ava-explain-bronze-123456789012-eu-central-1")
+    ap.add_argument("--bucket", help="defaults to $BRONZE_BUCKET, else derived from the caller's account")
     ap.add_argument("--status", default="RECOVERY_REQUIRED")
     ap.add_argument(
         "--execution-id",
@@ -150,6 +150,7 @@ def main() -> int:
     ap.add_argument("--apply", action="store_true", help="write to S3 and update the manifest")
     ap.add_argument("--ca-bundle")
     args = ap.parse_args()
+    args.bucket = gcapi.bronze_bucket(args.bucket)
 
     ddb = boto3.client("dynamodb")
     s3 = boto3.client("s3")
