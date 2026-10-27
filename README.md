@@ -13,6 +13,17 @@ The repository contains two things — a **product**, and the **evidence** that 
 | `collector/`, `infra/` | The always-on AWS backend: an EventBridge → SQS → Lambda collector that archives execution history through Jobs, and an hourly Reporting Turns sweep that persists every AVA session, which the web app reads through Vercel OIDC. |
 | `harness/` | Python probes used to measure the platform ([`harness/README.md`](harness/README.md)). |
 
+## Architecture at a glance
+
+[![AVA Explainability technical architecture: Genesys Cloud pushes flow-execution events through an EventBridge partner bus, SQS and a collector Lambda that retrieves full execution history via the Jobs API into S3 and a DynamoDB manifest; an hourly sweep Lambda stores Reporting Turns tool usage in DynamoDB; the Next.js web app on Vercel reads both through Vercel OIDC and also captures live via Notifications WebSocket and on-demand Jobs.](docs/images/ava-explainability-architecture.jpg)](docs/images/ava-explainability-architecture.jpg)
+
+Two complementary paths. The **real-time path** turns each `v2.flows.instances.flow.{id}` event
+into a Jobs API retrieval of the full execution history, including tool inputs and outputs. That
+history exists only when the bot flow reaches an exit. The **hourly path** sweeps Reporting Turns,
+which records the tool calls on every AVA turn, including sessions that never exit, for about 10
+days. The resources are described in [The AWS backend](#the-aws-backend) and
+[`web/README.md`](web/README.md).
+
 **Start at [`web/README.md`](web/README.md)** for what the product does and how to run it.
 
 ## What was learned
@@ -21,10 +32,13 @@ The project began as an event-driven pipeline: subscribe to flow execution notif
 EventBridge, download the execution history each notification points at, archive it. Measuring the
 platform rather than assuming it produced three findings that reshaped the design.
 
-**Notifications carry the retrieval pointer, not AVA content.** Of 242 notification topics visible
-in the validated org, none carries tool calls, guardrail outcomes or turn detail. However,
-`v2.flows.instances.flow.{id}` reliably supplies `executionId`, `flowId` and `conversationId`.
-That is enough to eliminate discovery and submit the execution directly to the Jobs API.
+**Notifications carry the retrieval pointer, not AVA content.** Of 257 notification topics in the
+validated org, 201 are deliverable over EventBridge, and none carries tool calls, guardrail outcomes
+or turn detail. `executionHistoryUri` is declared in the schema but was absent even on an AVA
+execution that reached its flow exit. However, `v2.flows.instances.flow.{id}` reliably supplies
+`executionId`, `flowId` and, for executions inside a conversation, `conversationId` (sessions driven
+through the bot-flow sessions API have none). That is enough to eliminate discovery and submit the
+execution directly to the Jobs API.
 
 **Execution history batches, and batching is worth 10x.** A job accepts **10** execution ids (11 is
 a hard `422`), costs **2 API calls**, and returns a download URI per entity served from a host that

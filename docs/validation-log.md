@@ -1061,7 +1061,7 @@ own exit, and its event arrived about a minute later:
 | `executionHistoryUriTtl` | absent |
 | `execution[]` | 10 items, `executionItemsTruncated: false` |
 | `endpoint` | present |
-| `conversationId`, `invokingContext` | absent |
+| `conversationId`, `invokingContext` | absent, as expected for a session started through the bot-flow sessions API rather than a conversation |
 | collector outcome | `ARCHIVED` via `retrievalMethod: jobs`, 11,682 bytes |
 
 So an AVA execution that ends cleanly, which is the case where history definitely exists, still
