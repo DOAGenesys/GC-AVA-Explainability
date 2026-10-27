@@ -15,7 +15,7 @@ The repository contains two things — a **product**, and the **evidence** that 
 
 ## Architecture at a glance
 
-[![AVA Explainability technical architecture: Genesys Cloud pushes flow-execution events through an EventBridge partner bus, SQS and a collector Lambda that retrieves full execution history via the Jobs API into S3 and a DynamoDB manifest; an hourly sweep Lambda stores Reporting Turns tool usage in DynamoDB; the Next.js web app on Vercel reads both through Vercel OIDC and also captures live via Notifications WebSocket and on-demand Jobs.](docs/images/ava-explainability-architecture.jpg)](docs/images/ava-explainability-architecture.jpg)
+[![AVA Explainability technical architecture: Genesys Cloud pushes flow-execution events through an EventBridge partner bus, SQS and a collector Lambda that retrieves full execution history via the Jobs API into S3 and a DynamoDB manifest; an hourly sweep Lambda stores Reporting Turns tool usage in DynamoDB; the Next.js web app on Vercel reads both through Vercel OIDC and also captures live via Notifications WebSocket and on-demand Jobs.](docs/images/AVA%20Explainability%20Technical%20Architecture.png)](docs/images/AVA%20Explainability%20Technical%20Architecture.png)
 
 Two complementary paths. The **real-time path** turns each `v2.flows.instances.flow.{id}` event
 into a Jobs API retrieval of the full execution history, including tool inputs and outputs. That
