@@ -1015,6 +1015,59 @@ The same apply upgraded the EventBridge collector to inline Jobs retrieval at 10
 (SQS batch 5 -> 10) with credentials from Secrets Manager `ava-explain/genesys-oauth`, so
 execution history no longer depends on running `recover_jobs.py` by hand.
 
+## EventBridge-only capture, re-checked against every topic schema, 26 October 2026 - NOT POSSIBLE
+
+Reproduce: `python harness\scan_eventbridge_topics.py` (writes
+`artifacts/validation/eventbridge-topic-schemas.json`; prints topic names and field paths only).
+
+The org's live catalogue, `/api/v2/notifications/availabletopics?expand=transports,schema&includePreview=true`,
+lists 257 topics, of which 201 are deliverable over EventBridge - more than the public
+available-topics page shows. Every EventBridge-deliverable schema was walked field by field. None
+declares a field for AVA turns, prompts, tool calls or their inputs and outputs, guardrail outcomes,
+or AVA identity. The closest topic, `v2.flows.instances.flow.{id}`, carries identifiers, timestamps,
+`flowExitReason`, `executionItemsTruncated`, `executionHistoryUri` / `Ttl` and an `execution[]` list
+whose items hold only step identity, output path, start time, errors and warnings.
+
+So even with every bot flow reaching its exit, EventBridge delivers a pointer, not the evidence.
+The collector's Jobs retrieval and the Reporting Turns sweep remain required.
+
+## `executionHistoryUri` re-tested on an exiting AVA flow, 26 October 2026 - still absent
+
+Reproduce:
+
+```powershell
+python harness\drive_bot_flow.py --flow-id 0587849e-c3db-5db6-ae3e-5863c6107463 --sessions 1
+powershell -File %USERPROFILE%\.cursor\skills\aws\scripts\aws-exec.ps1 -Region eu-central-1 -Quiet `
+  -Run "%USERPROFILE%\.cursor\skills\aws\.venv\Scripts\python.exe harness\inspect_envelope_uri.py --execution-id <sessionId> --wait 600"
+```
+
+`inspect_envelope_uri.py` reads the manifest row and the verbatim envelope under
+`bronze/envelope/` and reports the URI only as absent, null, empty or present with length and host.
+
+The first attempt produced nothing at all: the Genesys integration
+`DO - EventBridge AVA Explainability` had been set to `DISABLED` / `INACTIVE` outside this repo, with
+its topics and AWS target unchanged, and the raw bus log held 0 events across its 7-day retention.
+The audit log had no record of the change. It was re-enabled and reported `ACTIVE` within 20
+seconds. Anyone running this stack should check the integration state before treating a quiet bus
+as a delivery finding.
+
+The second session on `DO - Agentic Intent Detection` (version 4.0, `digitalbot`) reached the flow's
+own exit, and its event arrived about a minute later:
+
+| Field | Value |
+|---|---|
+| `flowExitReason` | `FLOW_EXIT` |
+| `executionHistoryUri` | **absent** - the key is not in `eventBody` at all, not merely empty |
+| `executionHistoryUriTtl` | absent |
+| `execution[]` | 10 items, `executionItemsTruncated: false` |
+| `endpoint` | present |
+| `conversationId`, `invokingContext` | absent |
+| collector outcome | `ARCHIVED` via `retrievalMethod: jobs`, 11,682 bytes |
+
+So an AVA execution that ends cleanly, which is the case where history definitely exists, still
+gets no signed URI in its event. The Jobs API remains the only retrieval route, which the collector now
+does inline.
+
 ## Remaining work
 
 | Item | Why it is still open |
